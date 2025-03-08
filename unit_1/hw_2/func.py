@@ -15,9 +15,9 @@ _CONFIG = {
     "const_range": (-5, 5),          # 常数范围
     
     # 项数量配置
-    "max_terms": 4,                  # 表达式中的最大项数
-    "max_sin_terms": 1,              # 最大sin项数量
-    "max_cos_terms": 1,              # 最大cos项数量
+    "max_terms": 2,                  # 表达式中的最大项数
+    "max_sin_terms": 2,              # 最大sin项数量
+    "max_cos_terms": 2,              # 最大cos项数量
     "max_n": 3,                      # 递推式最大n值
     "max_depth": 1,                  # 嵌套调用最大深度
     
@@ -400,7 +400,6 @@ def generate_recursive_problem():
     #     [0], 
     #     _CONFIG["single_factor_prob"]
     # )
-
     max_depth = 0
 
     # 生成嵌套表达式

@@ -58,7 +58,7 @@ class JarTester:
         
         jar_output = jar_output.replace('^', '**')
         
-        def _is_eq_numeric(expr1, expr2, variables, n_tests=100, tolerance=1e-5):
+        def _is_eq_numeric(expr1, expr2, variables, n_tests=100, tolerance=1e-8):
             """通过数值方法验证两个表达式是否相等"""
             expr1_func = sympy.lambdify(variables, expr1, "numpy")
             expr2_func = sympy.lambdify(variables, expr2, "numpy")
@@ -76,19 +76,12 @@ class JarTester:
                 aerr = abs(val1 - val2)
                 rerr = aerr / val1
 
-                avg_tol += aerr
+                avg_tol += rerr
                 # 如果差异超过容差，则认为不相等
-                if aerr > tolerance:
-                    try:
-                        with open("aaa.log", "a") as fi:
-                            fi.write(str(rerr))
-                            fi.write("\n")
-                            fi.close()
-                    except Exception as e:
-                        print(e)
-                    return False, aerr
-                    
-            return True, avg_tol / n_tests
+            avg_err = avg_tol / n_tests
+            if avg_err > tolerance:
+                return False, avg_err
+            return True, avg_err
 
         try:
             x = symbols('x')
@@ -173,8 +166,8 @@ class JarTester:
                 flag = False
         
         if not flag:
-            res_str += f"{'JAR':<30} | {'Time(s)':<10} | {'Length':<30} | {'Run':<5} | {'Correct':<10} | {'error':<20}\n" \
-                    + "-" * 120 + "\n"
+            res_str += f"{'JAR':<30} | {'Time(s)':<10} | {'Length':<10} | {'Run':<5} | {'Correct':<10} | {'error':<20}\n" \
+                    + "-" * 100 + "\n"
             
             results.sort(key=lambda x: (len(str(x["output"])), x['execution_time']))
 
@@ -186,7 +179,7 @@ class JarTester:
                 matches = "✓" if result["matches_sympy"] else "✗"
                 error = str(result['avg_error'])
                 
-                res_str += f"{jar_name:<30} | {time_str:<10} | {length:<30} | {success:<5} | {matches:<10} | {error:<20}" + "\n"
+                res_str += f"{jar_name:<30} | {time_str:<10} | {length:<10} | {success:<5} | {matches:<10} | {error:<20}" + "\n"
             
         return res_str
 
