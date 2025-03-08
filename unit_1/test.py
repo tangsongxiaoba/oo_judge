@@ -151,6 +151,11 @@ class JarTester:
         """Display and validate test results"""
         flag = True
         res_str = ""
+
+        lens:list[int] = [len(str(result["output"])) for result in results]
+        lens.sort()
+        if (lens[-1] - lens[0]) / lens[-1] > 0.1 and lens[-1] > 100: 
+            flag = False
         for result in results:
             if result["success"]:
                 if not result["matches_sympy"]:
@@ -168,17 +173,20 @@ class JarTester:
                 flag = False
         
         if not flag:
-            res_str += f"{'JAR':<30} | {'Time(s)':<10} | {'Run':<5} | {'Correct':<10} | {'error':<20}\n" \
-                    + "-" * 80 + "\n"
+            res_str += f"{'JAR':<30} | {'Time(s)':<10} | {'Length':<30} | {'Run':<5} | {'Correct':<10} | {'error':<20}\n" \
+                    + "-" * 120 + "\n"
             
+            results.sort(key=lambda x: (len(str(x["output"])), x['execution_time']))
+
             for result in results:
                 jar_name = result["jar_file"]
                 time_str = f"{result['execution_time']:.3f}"
+                length = len(str(result["output"]))
                 success = "✓" if result["success"] else "✗"
                 matches = "✓" if result["matches_sympy"] else "✗"
                 error = str(result['avg_error'])
                 
-                res_str += f"{jar_name:<30} | {time_str:<10} | {success:<5} | {matches:<10} | {error:<20}" + "\n"
+                res_str += f"{jar_name:<30} | {time_str:<10} | {length:<30} | {success:<5} | {matches:<10} | {error:<20}" + "\n"
             
         return res_str
 
@@ -200,6 +208,9 @@ class JarTester:
         input()
 
         cnt = 0
+        local_time = time.localtime()
+        formatted_time = time.strftime("%Y-%m-%d-%H-%M-%S", local_time)
+        log_name = f"{formatted_time}_run.log"
         while True:
             cnt += 1
             JarTester._clear_screen()
@@ -235,8 +246,8 @@ class JarTester:
             log = JarTester._display_results(results, sympy_expr, input_expr)
             
             if log:
-                print("error")
-                with open("run.log", "a+", encoding="utf-8") as f:
+                
+                with open(os.path.join("logs", log_name), "a+", encoding="utf-8") as f:
                     f.write(log)
 
     @staticmethod

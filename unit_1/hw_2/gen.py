@@ -18,7 +18,7 @@ class TestGenerator:
         },
         'exponent': {
             'min': 0,
-            'max': 2,
+            'max': 3,
         },
         'space': {
             'prob': 0.7,
@@ -26,18 +26,18 @@ class TestGenerator:
         },
         'expression': {
             'max_depth': 2,
-            'term_count': {'min': 1, 'max': 3},
+            'term_count': {'min': 2, 'max': 4},
         },
         'factor': {
-            'choice_weights': [2, 1, 3],  # variable, constant, expression weights
+            'choice_weights': [1, 1, 3],  # variable, constant, expression weights
         },
         'variable_factor': {
             'power_prob': 0.5,
             'trig_functions': ['sin', 'cos'],
         },
         'term': {
-            'multi_factor_prob': 0.5,
-            'max_factors': 3,
+            'multi_factor_prob': 0.7,
+            'max_factors': 5,
             'sign_prob': 0.5,
         }
     }
