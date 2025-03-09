@@ -8,6 +8,7 @@ class JavaProjPackager:
     @staticmethod
     def _find_main_class(dir):
         """使用Java解析器查找包含main方法的类"""
+        file_path = ""
         for root, _, files in os.walk(dir):
             for file in files:
                 if file.endswith('.java'):
@@ -40,7 +41,7 @@ class JavaProjPackager:
         main_class_path, class_name = main_class_info
         src_path = os.path.dirname(main_class_path)
         # 编译Java项目
-        compile_command = ["javac", "-d", project_dir, main_class_path, "-sourcepath", src_path]
+        compile_command = ["javac", "-Xlint:unchecked", "-nowarn", "-encoding", "UTF-8","-d", project_dir, main_class_path, "-sourcepath", src_path]
         try:
             subprocess.run(compile_command, check=True)
         except subprocess.CalledProcessError as e:

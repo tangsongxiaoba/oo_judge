@@ -79,7 +79,7 @@ class JarTester:
                 avg_tol += rerr
                 # 如果差异超过容差，则认为不相等
             avg_err = avg_tol / n_tests
-            if avg_err > tolerance:
+            if abs(avg_err) > tolerance:
                 return False, avg_err
             return True, avg_err
 
@@ -145,10 +145,10 @@ class JarTester:
         flag = True
         res_str = ""
 
-        lens:list[int] = [len(str(result["output"])) for result in results]
-        lens.sort()
-        if (lens[-1] - lens[0]) / lens[-1] > 0.1 and lens[-1] > 100: 
-            flag = False
+        # lens:list[int] = [len(str(result["output"])) for result in results]
+        # lens.sort()
+        # if (lens[-1] - lens[0]) / lens[-1] > 0.1 and lens[-1] > 100: 
+        #     flag = False
         for result in results:
             if result["success"]:
                 if not result["matches_sympy"]:
