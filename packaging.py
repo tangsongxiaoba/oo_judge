@@ -38,8 +38,9 @@ class JavaProjPackager:
             return False
 
         main_class_path, class_name = main_class_info
+        src_path = os.path.dirname(main_class_path)
         # 编译Java项目
-        compile_command = ["javac", "-d", project_dir, main_class_path, "-sourcepath", project_dir]
+        compile_command = ["javac", "-d", project_dir, main_class_path, "-sourcepath", src_path]
         try:
             subprocess.run(compile_command, check=True)
         except subprocess.CalledProcessError as e:
