@@ -3,6 +3,7 @@ import random
 from sympy import symbols, expand
 import sympy
 import importlib
+import pprint
 
 current_package = __name__.rsplit('.', 1)[0] if '.' in __name__ else ''
 func = importlib.import_module(f"{current_package}.func" if current_package else "func")
@@ -46,78 +47,15 @@ class TestGenerator:
     def genData():
         """公开方法，返回generate_test_case的结果"""
 
-        def _add_extra_parentheses(expr):
-            """
-            在所有sin()和cos()函数调用内部添加额外的括号
-            例如: sin(x+y) -> sin((x+y))，sin(cos(x)) -> sin((cos((x))))
-            """
-            i = 0
-            result = ""
-            
-            while i < len(expr):
-                # 检查是否有sin或cos函数调用
-                if i + 3 < len(expr) and expr[i:i+3] == "sin" and expr[i+3] == "(":
-                    result += "sin("
-                    # 找到对应的右括号
-                    open_paren_pos = i + 3
-                    extra, closing_paren_pos = _find_matching_paren(expr, open_paren_pos)
-                    
-                    # 递归处理括号内的内容
-                    inner_content = _add_extra_parentheses(expr[open_paren_pos+1:closing_paren_pos])
-                    result += "(" + inner_content + "))"
-                    
-                    i = closing_paren_pos + 1
-                elif i + 3 < len(expr) and expr[i:i+3] == "cos" and expr[i+3] == "(":
-                    result += "cos("
-                    # 找到对应的右括号
-                    open_paren_pos = i + 3
-                    extra, closing_paren_pos = _find_matching_paren(expr, open_paren_pos)
-                    
-                    # 递归处理括号内的内容
-                    inner_content = _add_extra_parentheses(expr[open_paren_pos+1:closing_paren_pos])
-                    result += "(" + inner_content + "))"
-                    
-                    i = closing_paren_pos + 1
-                else:
-                    result += expr[i]
-                    i += 1
-            
-            return result
-        
-        def _find_matching_paren(expr, open_pos):
-            """
-            找到与open_pos位置的左括号匹配的右括号
-            返回括号内的内容和右括号的位置
-            """
-            assert expr[open_pos] == "("
-            
-            stack = 1  # 已经有一个左括号
-            i = open_pos + 1
-            
-            while i < len(expr) and stack > 0:
-                if expr[i] == "(":
-                    stack += 1
-                elif expr[i] == ")":
-                    stack -= 1
-                i += 1
-            
-            if stack != 0:
-                raise ValueError("括号不匹配")
-            
-            closing_pos = i - 1
-            return expr[open_pos+1:closing_pos], closing_pos
-
         if random.random() < 0.5:
             exp_str = TestGenerator.__generate_test_case()
             que_str = "0\n" + exp_str
             ans_str = TestGenerator._parse_expression_with_sympy(exp_str)
             return que_str, ans_str
         res = func.generate_recursive_problem()
-        que_str = ("1\n"
-        + _add_extra_parentheses(str(res['definition']['f0'])).replace("**", "^") + '\n' 
-        + _add_extra_parentheses(str(res['definition']['f1'])).replace("**", "^") + '\n' 
-        + _add_extra_parentheses(str(res['definition']['fn'])).replace("**", "^") + '\n' 
-        + _add_extra_parentheses(str(res['call'])).replace("**", "^"))
+        def_str = [res["definition"]["f0"], res["definition"]["f1"], res["definition"]["fn"]]
+        random.shuffle(def_str)
+        que_str = "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + res["call"]
         ans_str = res['result']
         return que_str, ans_str
 
@@ -295,10 +233,7 @@ class TestGenerator:
 
 # 使用示例
 if __name__ == "__main__":
-    for _ in range(1000):
+    for _ in range(10):
         t = TestGenerator.genData()
-        if(str(t[0]).startswith(("0", "1")) == False):
-            print("wrong format")
-            print("que: " + str(t[0]))
-            print("ans: " + str(t[1]))
+        print(t[0])
         
