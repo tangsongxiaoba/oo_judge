@@ -1,3 +1,4 @@
 javalang
 pyyaml
 sympy
+playwright

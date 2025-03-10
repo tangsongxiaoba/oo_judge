@@ -1,5 +1,6 @@
 __pycache__/
 jar/
 zip/
-/*.log
 logs/
+/*.log
+/*.txt
