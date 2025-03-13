@@ -11,6 +11,7 @@ import sympy
 from sympy import symbols, expand, Poly, Eq
 
 class JarTester:
+    _LENGTH_ERROR = False
     _jar_files = []
     _finder_executed = False
     _hw_n = ""
@@ -145,13 +146,16 @@ class JarTester:
         flag = True
         res_str = ""
 
-        # lens:list[int] = [len(str(result["output"])) for result in results]
-        # lens.sort()
-        # if (lens[-1] - lens[0]) / lens[-1] > 0.1 and lens[-1] > 100: 
-        #     flag = False
+        lens:list[int] = [len(str(result["output"])) for result in results]
+        lens.sort()
+        length_err = False
+        if JarTester._LENGTH_ERROR and (lens[-1] - lens[0]) / lens[-1] > 0.1 and lens[-1] > 100: 
+            flag = False
+            length_err = True
+
         for result in results:
             if result["success"]:
-                if not result["matches_sympy"]:
+                if not result["matches_sympy"] or length_err:
                     res_str += f"\n{result['jar_file']}:\n" \
                             + f"  jar output: {result['output']}\n" \
                             + f"sympy output: {sympy_expr}\n" \

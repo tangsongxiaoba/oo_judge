@@ -1,17 +1,27 @@
 import sympy as sp
 import re
+
+_FROM_FILE = True
 # 定义符号变量
 x = sp.symbols('x')
 
 # 两个字符串表达式
-str_expr1 = input("Enter std ans: ")
-str_expr2 = input("Enter usr ans: ")
+str_expr1 = ""
+str_expr2 = ""
+if not _FROM_FILE:
+    str_expr1 = input("Enter std ans: ")
+    str_expr2 = input("Enter usr ans: ")
+else:
+    str_expr1 = open("from_std.log", "r", encoding="utf-8").read()
+    str_expr2 = open("from_usr.log", "r", encoding="utf-8").read()
+
 
 str_expr1 = str_expr1.replace(" ", "")
 str_expr1 = str_expr1.replace("\t", "")
 str_expr1 = re.sub(r'\b0+(\d+)\b', r'\1', str_expr1)
 
 str_expr1 = str_expr1.replace("^", "**")
+str_expr1 = str_expr1.replace("dx(", "diff(")
 str_expr2 = str_expr2.replace("^", "**")
 
 # 将字符串转换为符号表达式
@@ -39,4 +49,3 @@ if sp.simplify(new_expr1) == 0:
     print("The expressions are equal.")
 else:
     print("The expressions are NOT equal.")
-
