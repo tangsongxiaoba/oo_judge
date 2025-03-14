@@ -17,7 +17,7 @@ _CONFIG: Dict[str, Any] = {
     "special_coef_prob": 0.5,                 # 选择特殊系数的概率
     # var_exp:
     "exp_range": (0, 3),                 # 指数值范围
-    "special_exponent": [0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 8], # 特殊指数值
+    "special_exponent": [0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 5], # 特殊指数值
     "special_exponent_prob": 0.3,        # 选择特殊指数的概率
     # expr_factor/diff_factor:
     "max_expr_terms": 2,
@@ -28,7 +28,7 @@ _CONFIG: Dict[str, Any] = {
     "special_expr_coef": [0, -1, 1, 1, 1, 2],
     "special_expr_coef_prob": 0.75,
     "expr_offset_range": (-2, 2),
-    "special_expr_offset": [0, -1, 1, 1, 1, 2],
+    "special_expr_offset": [0, -1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 2],
     "special_expr_offset_prob": 0.75,
     "expr_power_range": (1, 2),
     "special_expr_power": [1, 1, 1, 0],
@@ -65,6 +65,17 @@ _CONFIG: Dict[str, Any] = {
     
     # 参数互换
     "swap_probablity": 0.5,
+
+    # 自定义函数属性
+    "max_func_terms": 2,
+    "special_func_cnt": [0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 2],
+    "special_func_prob": 0.75,
+    "max_para_terms": 2,
+    "special_para_cnt": [1, 1, 2, 1, 1, 1, 2, 1, 2, 1, 1, 2, 1],
+    "special_para_prob": 0.75,
+    "max_func_use_terms": 2,
+    "special_func_use_cnt": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    "special_func_use_prob": 0.98,
 }
 
 def _custom_random(min_val: int, 
@@ -94,7 +105,7 @@ def _custom_random(min_val: int,
         return random.choice(special_values)
     return ret
 
-def _generate_expression(variable: List[sp.Expr], max_depth: int = 1, complexity: float = 1.0) -> sp.Expr:
+def _generate_expression(variable: List[sp.Expr], max_depth: int = 1, complexity: float = 1.0, exception=[]) -> sp.Expr:
     """
     生成一个复杂符号表达式
     标准项形式: Σ(a * variable^b * Π(sin(expr_i)^c_i) * Π(cos(expr_i)^d_i))
@@ -268,13 +279,33 @@ def _generate_expression(variable: List[sp.Expr], max_depth: int = 1, complexity
                 nxt_cmpl = adj_cmpl * 0.8
                 cos_expr: sp.Expr = sp.cos(_generate_expression(variable, max_depth-1, nxt_cmpl)) ** power
             cos_factors.append(cos_expr)
-        
+        global ret
+        global _g, _h
+        func_factors = []
+        if ret and len(exception) != 2:
+            func_num: int = _custom_random(
+                0,
+                max(1, _CONFIG["max_func_use_terms"]),
+                _CONFIG["special_func_use_cnt"],
+                _CONFIG["special_func_prob"]
+            )
+            for _ in range(func_num):
+                can_get = [key for key in ret.keys() if ret[key]["true_func"] not in exception]
+                func = random.choice(can_get)
+                nxt_cmpl = adj_cmpl * 0.8
+                if ret[func]["para_num"] == 1:
+                    func_factors.append(ret[func]["true_func"](_generate_expression(variable, max_depth -1, nxt_cmpl, exception)))
+                else:
+                    func_factors.append(ret[func]["true_func"](_generate_expression(variable, max_depth - 1, nxt_cmpl, exception), _generate_expression(variable, max_depth - 1, nxt_cmpl, exception)))
+
         term: sp.Expr = a * (random.choice(variable) ** b)
         for factor in sin_factors:
             term *= factor
         for factor in cos_factors:
             term *= factor
         for factor in expr_factors:
+            term *= factor
+        for factor in func_factors:
             term *= factor
         terms.append(term)
     
@@ -330,7 +361,7 @@ def _generate_nested_call(n: int, max_depth: int = 2) -> Union[RecursiveCall, sp
             special_exprs: List[Union[sp.Expr, int]] = [_x] + _CONFIG["special_simple_expr"]
             return random.choice(special_exprs)
         else:
-            return _generate_expression([_x], 0, 0.45)
+            return _generate_expression([_x], 0, 0.3)
     
     nested_n: int = _custom_random(
         0, 
@@ -408,7 +439,7 @@ def _add_extra_parentheses(expr):
     """
     i = 0
     result = ""
-    
+    global ret
     while i < len(expr):
         # 检查是否有sin或cos函数调用
         if i + 3 < len(expr) and expr[i:i+3] == "sin" and expr[i+3] == "(":
@@ -433,26 +464,52 @@ def _add_extra_parentheses(expr):
             result += "(" + inner_content + "))"
             
             i = closing_paren_pos + 1
+        elif i + 1 < len(expr) and (expr[i] == "g" or expr[i] == "h") and expr[i+1] == '(':
+            result += f"{expr[i]}("
+            open_paren_pos = i + 1
+            if ret[expr[i]]["para_num"] == 1:
+                extra, closing_paren_pos = _find_matching_paren(expr, open_paren_pos)
+                
+                # 递归处理括号内的内容
+                inner_content = _add_extra_parentheses(expr[open_paren_pos+1:closing_paren_pos])
+                result += "(" + inner_content + "))"
+            else :
+                extra, closing_paren_pos = _find_matching_paren(expr, open_paren_pos, True)
+                # 递归处理括号内的内容
+                inner_content = _add_extra_parentheses(expr[open_paren_pos+1:closing_paren_pos])
+                result += "(" + inner_content + "),"
+                
+                open_paren_pos = closing_paren_pos
+                extra, closing_paren_pos = _find_matching_paren(expr, open_paren_pos, False)
+                inner_content = _add_extra_parentheses(expr[open_paren_pos+1:closing_paren_pos])
+                result += "(" + inner_content + "))"
+            
+            i = closing_paren_pos + 1
         else:
             result += expr[i]
             i += 1
     
     return result
 
-def _find_matching_paren(expr, open_pos):
+def _find_matching_paren(expr, open_pos, comma=False):
     """
     找到与open_pos位置的左括号匹配的右括号
     返回括号内的内容和右括号的位置
     """
-    assert expr[open_pos] == "("
-    
+    # assert expr[open_pos] == "("
+    if expr[open_pos] == "(" or expr[open_pos] == ",":
+        pass
+    else:
+        raise Exception
     stack = 1  # 已经有一个左括号
     i = open_pos + 1
-    
+    not_find = True
     while i < len(expr) and stack > 0:
         if expr[i] == "(":
             stack += 1
         elif expr[i] == ")":
+            stack -= 1
+        elif comma and expr[i] == ',':
             stack -= 1
         i += 1
     
@@ -462,6 +519,61 @@ def _find_matching_paren(expr, open_pos):
     closing_pos = i - 1
     return expr[open_pos+1:closing_pos], closing_pos
 
+def generate_function_problem():
+    global _x, _y
+    global _g, _h
+    func_num: int = _custom_random(
+        0,
+        max(1, _CONFIG["max_func_terms"]),
+        _CONFIG["special_func_cnt"],
+        _CONFIG["special_func_prob"]
+    )
+    func_names = [
+        {"func_name": "g", "true_func": _g},
+        {"func_name": "h", "true_func": _h}
+    ]
+    random.shuffle(func_names)
+    func_exprs = []
+    global ret
+    ret = {}
+    for i in range(func_num):
+        func_name = func_names[i]["func_name"]
+        ret[func_name] = {}
+        ret[func_name]["true_func"] = func_names[i]["true_func"]
+        paras = [_x, _y]
+        para_num: int = _custom_random(
+            1,
+            max(1, _CONFIG["max_para_terms"]),
+            _CONFIG["special_para_cnt"],
+            _CONFIG["special_para_prob"]
+        )
+        generate_paras = []
+        if para_num == 2:
+            random.shuffle(paras)
+            generate_paras = paras
+            ret[func_name]["paras"] = ["x", "y"] if generate_paras[0] == _x else ["y", "x"]
+            ret[func_name]["para_num"] = 2
+        else:
+            generate_paras.append(random.choice(paras))
+            ret[func_name]["paras"] = ["x"] if generate_paras[0] == _x else ["y"]
+            ret[func_name]["para_num"] = 1
+        abort = []
+        if i == 0:
+            abort = [_g, _h]
+        else:
+            abort = [_g] if func_name == "g" else [_h]
+        expr = _generate_expression(generate_paras, 0.3, exception=abort)
+        ret[func_name]["expr"] = expr
+        if ret[func_name]["para_num"] == 1:
+            u = paras[0]
+            ret[func_name]["func"] = lambda a: expr.subs({u: a})
+        else:
+            u = paras[0]
+            v = paras[1]
+            ret[func_name]["func"] = lambda a, b: expr.subs({u: a, v: b})
+        
+
+
 def generate_recursive_problem() -> Optional[Dict[str, Any]]:
     """
     主函数，用于生成和求解递推式问题
@@ -469,12 +581,17 @@ def generate_recursive_problem() -> Optional[Dict[str, Any]]:
     返回:
     - 一个包含递推式定义、调用和计算结果的字典，若计算失败则返回 None
     """
+    global _g, _h
+    _g = sp.Function("g")
+    _h = sp.Function("h")
+    
     # 定义递推关系中的函数，使用全局变量
     global g, h, w, v, i, f0, f1, a, b
 
     global _x, _y
     _x, _y = sp.symbols('x y')
-
+    generate_function_problem()
+    pprint.pprint(ret)
     # f{n}(x, y) = a * f{n-1}(g(x, y), h(x, y)) + b * f{n-2}(w(x, y), v(x, y)) + i(x, y)
 
     g = _generate_expression([_x, _y], 1, 0.5)
@@ -533,7 +650,11 @@ def generate_recursive_problem() -> Optional[Dict[str, Any]]:
 
     final_call = RecursiveCall(n, x_expr, y_expr)
     try:
+        func_locals = {}
+        for key in ret.keys():
+            func_locals[key] = ret[key]["func"]
         symbolic_result = _evaluate_symbolic(final_call)
+        symbolic_result = sp.sympify(str(symbolic_result), locals=func_locals)
         final_call_str = str(final_call)
 
         f0_def = "f{0}(x,y) = " + str(f0)
@@ -544,8 +665,7 @@ def generate_recursive_problem() -> Optional[Dict[str, Any]]:
         f1_def = _add_extra_parentheses(f1_def).replace("**", "^")
         fn_def = _add_extra_parentheses(fn_def).replace("**", "^")
         args = [_add_extra_parentheses(arg).replace("**", "^") for arg in args]
-
-        return {
+        ret_dict = {
             "definition": {
                 "f0": f0_def, 
                 "f1": f1_def,
@@ -556,6 +676,12 @@ def generate_recursive_problem() -> Optional[Dict[str, Any]]:
             "args": args,
             "result": symbolic_result
         }
+        ret_dict["self_func"] = []
+        for key in ret.keys():
+            func_body = _add_extra_parentheses(str(ret[key]["expr"])).replace("**", "^")
+            func_str = f"{key}({','.join(ret[key]['paras'])})={func_body}"
+            ret_dict["self_func"].append(func_str) 
+        return ret_dict
     except Exception as e:
         print(f"符号计算出错: {e}")
         print("嵌套层次可能太深，导致计算太复杂。尝试减少max_depth参数或减少表达式复杂度。")
@@ -579,7 +705,8 @@ if __name__ == "__main__":
     res = generate_recursive_problem()
     def_str = [res["definition"]["f0"], res["definition"]["f1"], res["definition"]["fn"]]
     random.shuffle(def_str)
-    que_str = "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
+    func_str = "\n".join(res["self_func"])
+    que_str = f"{len(res['self_func'])}\n" + f"{func_str}\n" + "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
     ans_str = res['result']
     pprint.pprint(res)
     print(que_str)
