@@ -50,16 +50,19 @@ class TestGenerator:
         """公开方法，返回generate_test_case的结果"""
 
         choice = random.random()
-        if choice < 0.2:
+        if choice < 0.3:
             exp_str = TestGenerator.__generate_test_case()
             que_str = "0\n0\n" + exp_str
             ans_str = TestGenerator._parse_expression_with_sympy(exp_str)
             return que_str, ans_str
-        elif choice < 0.5:
+        elif choice < 0.7:
             res = func.generate_recursive_problem()
             def_str = [res["definition"]["f0"], res["definition"]["f1"], res["definition"]["fn"]]
             random.shuffle(def_str)
-            que_str = "0\n1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
+            func_str = "\n".join(res["self_func"])
+            if func_str != "":
+                func_str = func_str + "\n"
+            que_str = f"{len(res['self_func'])}\n" + f"{func_str}" + "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
             ans_str = res['result']
             return que_str, ans_str
 

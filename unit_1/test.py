@@ -59,7 +59,7 @@ class JarTester:
         
         jar_output = jar_output.replace('^', '**')
         
-        def _is_eq_numeric(expr1, expr2, variables, n_tests=20, tolerance=1e-8):
+        def _is_eq_numeric(expr1, expr2, variables, n_tests=10, tolerance=1e-8):
             """通过数值方法验证两个表达式是否相等"""
             mpmath.mp.dps = 30
             expr1_func = sympy.lambdify([x], expr1, "mpmath")

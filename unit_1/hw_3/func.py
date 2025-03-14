@@ -17,12 +17,12 @@ _CONFIG: Dict[str, Any] = {
     "special_coef_prob": 0.5,                 # 选择特殊系数的概率
     # var_exp:
     "exp_range": (0, 3),                 # 指数值范围
-    "special_exponent": [0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 5], # 特殊指数值
+    "special_exponent": [0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 4], # 特殊指数值
     "special_exponent_prob": 0.3,        # 选择特殊指数的概率
     # expr_factor/diff_factor:
-    "max_expr_terms": 2,
-    "special_expr_cnt": [0, 1, 2],
-    "special_expr_prob": 0.6,
+    "max_expr_terms": 1,
+    "special_expr_cnt": [0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0],
+    "special_expr_prob": 0.8,
     # for each expr_factor/diff_factor:
     "expr_coef_range": (-2, 2),
     "special_expr_coef": [0, -1, 1, 1, 1, 2],
@@ -34,16 +34,16 @@ _CONFIG: Dict[str, Any] = {
     "special_expr_power": [1, 1, 1, 0],
     "special_expr_power_prob": 0.75,
     # trig:
-    "max_trig_terms": 3,       # 最大trig项数量
-    "spcial_trig_cnt": [0, 1, 2], # 表达式特殊trig项数
-    "special_trig_prob": 0.5,  # 生成特殊trig项数的概率
+    "max_trig_terms": 2,       # 最大trig项数量
+    "spcial_trig_cnt": [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2], # 表达式特殊trig项数
+    "special_trig_prob": 0.8,  # 生成特殊trig项数的概率
     # for each trig:
     "trig_coef_range": (-3, 3),                    # 三角函数内系数范围
     "special_trig_coef": [0, 1, -1, -1, -1, 2],    # 特殊三角函数系数
     "special_trig_coef_prob": 0.6,                 # 选择特殊三角函数系数的概率
     "trig_offset_range": (-3, 3),                  # 三角函数内偏移量范围
     "special_trig_offset": [0, 1, -1, -1, -1, -2], # 特殊三角函数偏移量
-    "special_trig_offset_prob": 0.55,               # 选择特殊三角函数偏移量的概率
+    "special_trig_offset_prob": 0.8,               # 选择特殊三角函数偏移量的概率
     "trig_power_range": (0, 4),                    # 三角函数的指数范围
     "special_trig_power": [0, 0, 2, 2],            # 特殊三角函数指数
     "special_trig_power_prob": 0.5,                # 选择特殊三角函数指数的概率
@@ -73,8 +73,8 @@ _CONFIG: Dict[str, Any] = {
     "max_para_terms": 2,
     "special_para_cnt": [1, 1, 2, 1, 1, 1, 2, 1, 2, 1, 1, 2, 1],
     "special_para_prob": 0.75,
-    "max_func_use_terms": 2,
-    "special_func_use_cnt": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    "max_func_use_terms": 1,
+    "special_func_use_cnt": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     "special_func_use_prob": 0.98,
 }
 
@@ -510,7 +510,10 @@ def _find_matching_paren(expr, open_pos, comma=False):
         elif expr[i] == ")":
             stack -= 1
         elif comma and expr[i] == ',':
-            stack -= 1
+            if stack == 1:
+                stack -= 1
+                i += 1
+                break
         i += 1
     
     if stack != 0:
@@ -591,7 +594,7 @@ def generate_recursive_problem() -> Optional[Dict[str, Any]]:
     global _x, _y
     _x, _y = sp.symbols('x y')
     generate_function_problem()
-    pprint.pprint(ret)
+    # pprint.pprint(ret)
     # f{n}(x, y) = a * f{n-1}(g(x, y), h(x, y)) + b * f{n-2}(w(x, y), v(x, y)) + i(x, y)
 
     g = _generate_expression([_x, _y], 1, 0.5)
@@ -706,7 +709,9 @@ if __name__ == "__main__":
     def_str = [res["definition"]["f0"], res["definition"]["f1"], res["definition"]["fn"]]
     random.shuffle(def_str)
     func_str = "\n".join(res["self_func"])
-    que_str = f"{len(res['self_func'])}\n" + f"{func_str}\n" + "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
+    if func_str != "":
+        func_str = func_str + "\n"
+    que_str = f"{len(res['self_func'])}\n" + f"{func_str}" + "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
     ans_str = res['result']
     pprint.pprint(res)
     print(que_str)
