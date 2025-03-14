@@ -1,3 +1,5 @@
+import random
+import numpy as np
 import sympy as sp
 import re
 
@@ -39,13 +41,36 @@ with open("std.log", "w", encoding="utf-8") as file:
     file.write(str(simplified_expr1))
 with open("usr.log", "w", encoding="utf-8") as file:
     file.write(str(simplified_expr2))
+n_tests = 50
+import mpmath
+mpmath.mp.dps = 30
+expr1_func = sp.lambdify([x], simplified_expr1, "mpmath")
+expr2_func = sp.lambdify([x], simplified_expr2, "mpmath")
+avg_tol = mpmath.mpf('0')
+for _ in range(n_tests):
+    # 生成随机测试点
+    test_point = {var: random.uniform(-2*mpmath.pi, 2*mpmath.pi) for var in [x]}
+    values = [mpmath.mpf(test_point[var]) for var in [x]]
+    
+    # 计算两个表达式在测试点的值
+    val1 = expr1_func(*values)
+    val2 = expr2_func(*values)
+    aerr = abs(val1 - val2)
+    if abs(val1) != 0:
+        rerr = aerr / abs(val1)
+    else:
+        rerr = aerr    
+    avg_tol += rerr
+    # 如果差异超过容差，则认为不相等
+avg_err = avg_tol / n_tests
+print(avg_err)
 
-new_expr1 = sp.collect(simplified_expr1 - simplified_expr2, x)
+# new_expr1 = sp.collect(simplified_expr1 - simplified_expr2, x)
 # print("THE two exprs minus:",sp.collect(new_expr1, x))
-new_expr1 = sp.trigsimp(new_expr1)
+# new_expr1 = sp.trigsimp(new_expr1)
 
-# 判断简化后的表达式是否相等
-if sp.simplify(new_expr1) == 0:
-    print("The expressions are equal.")
-else:
-    print("The expressions are NOT equal.")
+# # 判断简化后的表达式是否相等
+# if sp.simplify(new_expr1) == 0:
+#     print("The expressions are equal.")
+# else:
+#     print("The expressions are NOT equal.")

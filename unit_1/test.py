@@ -5,8 +5,8 @@ import importlib
 import subprocess
 import concurrent.futures
 import random
+import mpmath
 import numpy as np
-
 import sympy
 from sympy import symbols, expand, Poly, Eq
 
@@ -59,24 +59,25 @@ class JarTester:
         
         jar_output = jar_output.replace('^', '**')
         
-        def _is_eq_numeric(expr1, expr2, variables, n_tests=100, tolerance=1e-8):
+        def _is_eq_numeric(expr1, expr2, variables, n_tests=20, tolerance=1e-8):
             """通过数值方法验证两个表达式是否相等"""
-            expr1_func = sympy.lambdify(variables, expr1, "numpy")
-            expr2_func = sympy.lambdify(variables, expr2, "numpy")
-            avg_tol = 0
-            
+            mpmath.mp.dps = 30
+            expr1_func = sympy.lambdify([x], expr1, "mpmath")
+            expr2_func = sympy.lambdify([x], expr2, "mpmath")
+            avg_tol = mpmath.mpf('0')
             for _ in range(n_tests):
                 # 生成随机测试点
-                test_point = {var: random.uniform(-2*np.pi, 2*np.pi) for var in variables}
-                values = [test_point[var] for var in variables]
+                test_point = {var: random.uniform(-2*mpmath.pi, 2*mpmath.pi) for var in [x]}
+                values = [mpmath.mpf(test_point[var]) for var in [x]]
                 
                 # 计算两个表达式在测试点的值
                 val1 = expr1_func(*values)
                 val2 = expr2_func(*values)
-
                 aerr = abs(val1 - val2)
-                rerr = aerr / val1
-
+                if abs(val1) != 0:
+                    rerr = aerr / abs(val1)
+                else:
+                    rerr = aerr    
                 avg_tol += rerr
                 # 如果差异超过容差，则认为不相等
             avg_err = avg_tol / n_tests

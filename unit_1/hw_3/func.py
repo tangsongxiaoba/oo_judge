@@ -13,23 +13,37 @@ _CONFIG: Dict[str, Any] = {
     # for each term:
     # coef:
     "coef_range": (-3, 3),                    # 系数值范围
-    "special_coef": [0, 1, -1], # 特殊系数值
+    "special_coef": [0, 1, -1],  # 特殊系数值
     "special_coef_prob": 0.5,                 # 选择特殊系数的概率
     # var_exp:
     "exp_range": (0, 3),                 # 指数值范围
-    "special_exponent": [0, 1, 0, 1, 1, 0, 0, 1, 1, 8], # 特殊指数值
-    "special_exponent_prob": 0.5,        # 选择特殊指数的概率
+    "special_exponent": [0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 8], # 特殊指数值
+    "special_exponent_prob": 0.3,        # 选择特殊指数的概率
+    # expr_factor/diff_factor:
+    "max_expr_terms": 2,
+    "special_expr_cnt": [0, 1, 2],
+    "special_expr_prob": 0.6,
+    # for each expr_factor/diff_factor:
+    "expr_coef_range": (-2, 2),
+    "special_expr_coef": [0, -1, 1, 1, 1, 2],
+    "special_expr_coef_prob": 0.75,
+    "expr_offset_range": (-2, 2),
+    "special_expr_offset": [0, -1, 1, 1, 1, 2],
+    "special_expr_offset_prob": 0.75,
+    "expr_power_range": (1, 2),
+    "special_expr_power": [1, 1, 1, 0],
+    "special_expr_power_prob": 0.75,
     # trig:
-    "max_trig_terms": 4,       # 最大trig项数量
+    "max_trig_terms": 3,       # 最大trig项数量
     "spcial_trig_cnt": [0, 1, 2], # 表达式特殊trig项数
     "special_trig_prob": 0.5,  # 生成特殊trig项数的概率
     # for each trig:
     "trig_coef_range": (-3, 3),                    # 三角函数内系数范围
-    "special_trig_coef": [0, 1, -1, -1, -1, 6],    # 特殊三角函数系数
-    "special_trig_coef_prob": 0.5,                 # 选择特殊三角函数系数的概率
+    "special_trig_coef": [0, 1, -1, -1, -1, 2],    # 特殊三角函数系数
+    "special_trig_coef_prob": 0.6,                 # 选择特殊三角函数系数的概率
     "trig_offset_range": (-3, 3),                  # 三角函数内偏移量范围
-    "special_trig_offset": [0, 1, -1, -1, -1, -6], # 特殊三角函数偏移量
-    "special_trig_offset_prob": 0.5,               # 选择特殊三角函数偏移量的概率
+    "special_trig_offset": [0, 1, -1, -1, -1, -2], # 特殊三角函数偏移量
+    "special_trig_offset_prob": 0.55,               # 选择特殊三角函数偏移量的概率
     "trig_power_range": (0, 4),                    # 三角函数的指数范围
     "special_trig_power": [0, 0, 2, 2],            # 特殊三角函数指数
     "special_trig_power_prob": 0.5,                # 选择特殊三角函数指数的概率
@@ -140,12 +154,55 @@ def _generate_expression(variable: List[sp.Expr], max_depth: int = 1, complexity
             _CONFIG["special_trig_prob"]
         )
 
+        # 总expr项数量
+        num_expr_factors: int = _custom_random(
+            0,
+            max(1, int(_CONFIG["max_expr_terms"] * adj_cmpl)),
+            _CONFIG["special_expr_cnt"],
+            _CONFIG["special_expr_prob"]
+        )
+
         num_sin_factors: int = random.randint(0, num_trig_factors)
         num_cos_factors: int = num_trig_factors - num_sin_factors
         sin_factors: List[sp.Expr] = []
         cos_factors: List[sp.Expr] = []
+        expr_factors: List[sp.Expr] = []
 
         cur_max_depth = max(0, int(max_depth * adj_cmpl))
+
+        for _ in range(num_expr_factors):
+            power: int = _custom_random(
+                _CONFIG["expr_power_range"][0], 
+                int(_CONFIG["expr_power_range"][1] * adj_cmpl), 
+                _CONFIG["special_expr_power"], 
+                _CONFIG["special_expr_power_prob"]
+            )
+
+            if power > _CONFIG["expr_power_range"][1] * 0.7:
+                extreme_factor += 0.1  # 增加极端因子
+            elif power < _CONFIG["expr_power_range"][1] * 0.3:
+                extreme_factor -= 0.1
+
+            # 同时生成求导因子
+            if (cur_max_depth <= 0):
+                coef: int = _custom_random(
+                        int(_CONFIG["expr_coef_range"][0] * adj_cmpl),
+                        int(_CONFIG["expr_coef_range"][1] * adj_cmpl), 
+                        _CONFIG["special_expr_coef"], 
+                        _CONFIG["special_expr_coef_prob"]
+                    )
+                offset: int = _custom_random(
+                    int(_CONFIG["expr_offset_range"][0] * adj_cmpl), 
+                    int(_CONFIG["expr_offset_range"][1] * adj_cmpl), 
+                    _CONFIG["special_expr_offset"], 
+                    _CONFIG["special_expr_offset_prob"]
+                )  
+                expr_expr: sp.Expr = (coef * random.choice(variable) + offset) ** power       
+            else:
+                nxt_cmpl = adj_cmpl * 1.2
+                expr_expr: sp.Expr = (_generate_expression(variable, max_depth-1, nxt_cmpl)) ** power
+            
+            expr_factors.append(expr_expr)
         
         for _ in range(num_sin_factors):
             power: int = _custom_random(
@@ -217,6 +274,8 @@ def _generate_expression(variable: List[sp.Expr], max_depth: int = 1, complexity
             term *= factor
         for factor in cos_factors:
             term *= factor
+        for factor in expr_factors:
+            term *= factor
         terms.append(term)
     
     expression: sp.Expr = 0
@@ -271,7 +330,7 @@ def _generate_nested_call(n: int, max_depth: int = 2) -> Union[RecursiveCall, sp
             special_exprs: List[Union[sp.Expr, int]] = [_x] + _CONFIG["special_simple_expr"]
             return random.choice(special_exprs)
         else:
-            return _generate_expression([_x], 0, 0.6)
+            return _generate_expression([_x], 0, 0.45)
     
     nested_n: int = _custom_random(
         0, 
@@ -458,11 +517,21 @@ def generate_recursive_problem() -> Optional[Dict[str, Any]]:
     )
 
     # 生成嵌套表达式
+    args = []
     x_expr = _generate_nested_call(n, max_depth=max_depth)
     y_expr = _generate_nested_call(n, max_depth=max_depth)
-    
-    final_call = RecursiveCall(n, x_expr, y_expr)
+    if random.randint(0, 1) == 0:
+        args.append(f"dx({x_expr})")
+        x_expr = sp.diff(x_expr)
+    else:
+        args.append(f"({x_expr})")
+    if random.randint(0, 1) == 0:
+        args.append(f"dx({y_expr})")
+        y_expr = sp.diff(y_expr)
+    else:
+        args.append(f"({y_expr})")
 
+    final_call = RecursiveCall(n, x_expr, y_expr)
     try:
         symbolic_result = _evaluate_symbolic(final_call)
         final_call_str = str(final_call)
@@ -474,7 +543,7 @@ def generate_recursive_problem() -> Optional[Dict[str, Any]]:
         f0_def = _add_extra_parentheses(f0_def).replace("**", "^")
         f1_def = _add_extra_parentheses(f1_def).replace("**", "^")
         fn_def = _add_extra_parentheses(fn_def).replace("**", "^")
-        final_call_str = _add_extra_parentheses(final_call_str).replace("**", "^")
+        args = [_add_extra_parentheses(arg).replace("**", "^") for arg in args]
 
         return {
             "definition": {
@@ -483,6 +552,8 @@ def generate_recursive_problem() -> Optional[Dict[str, Any]]:
                 "fn": fn_def
             },
             "call": final_call_str,
+            "actual_call": final_call_str[:4],
+            "args": args,
             "result": symbolic_result
         }
     except Exception as e:
@@ -508,7 +579,7 @@ if __name__ == "__main__":
     res = generate_recursive_problem()
     def_str = [res["definition"]["f0"], res["definition"]["f1"], res["definition"]["fn"]]
     random.shuffle(def_str)
-    que_str = "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + res["call"]
+    que_str = "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
     ans_str = res['result']
     pprint.pprint(res)
     print(que_str)
