@@ -2,6 +2,7 @@ import sympy as sp
 import random
 import pprint
 from typing import Any, Dict, List, Optional, Union
+from functools import partial
 
 # 中心化配置
 _CONFIG: Dict[str, Any] = {
@@ -36,7 +37,7 @@ _CONFIG: Dict[str, Any] = {
     # trig:
     "max_trig_terms": 2,       # 最大trig项数量
     "spcial_trig_cnt": [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2], # 表达式特殊trig项数
-    "special_trig_prob": 0.5,  # 生成特殊trig项数的概率
+    "special_trig_prob": 0.65,  # 生成特殊trig项数的概率
     # for each trig:
     "trig_coef_range": (-3, 3),                    # 三角函数内系数范围
     "special_trig_coef": [0, 1, -1, -1, -1, 2],    # 特殊三角函数系数
@@ -54,14 +55,14 @@ _CONFIG: Dict[str, Any] = {
     "special_const_prob": 0.3,       # 选择特殊常数的概率
     
     "max_n": 3,                      # 递推式最大n值
-    "special_n": [0, 1],          # 特殊n值
-    "special_n_prob": 0.3,           # 选择特殊n值的概率
+    "special_n": [0, 1, 0, 1, 1, 0, 0, 2, 2, 1, 0, 1, 1, 0, 1, 2, 2, 1, 1, 1],          # 特殊n值
+    "special_n_prob": 0.9,           # 选择特殊n值的概率
     
     "max_depth": 0,                  # 嵌套调用最大深度
     "skip_nesting_prob": 0.3,        # 跳过嵌套的概率
     "special_expr_prob": 0.3,        # 选择特殊表达式的概率
     "special_simple_expr": [0, 1, -1, 2, -2],  # 特殊简单表达式
-    "simple_params_prob": 0.7,       # 使用简单参数的概率
+    "simple_params_prob": 0.75,       # 使用简单参数的概率
     
     # 参数互换
     "swap_probablity": 0.5,
@@ -69,12 +70,12 @@ _CONFIG: Dict[str, Any] = {
     # 自定义函数属性
     "max_func_terms": 2,
     "special_func_cnt": [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 2],
-    "special_func_prob": 0.5,
+    "special_func_prob": 0.8,
     "max_para_terms": 2,
     "special_para_cnt": [1, 1, 2, 1, 1,1, 1,1,1,1,1,1,1,1,1,1,1, 1, 2, 1, 2, 1, 1, 2, 1],
-    "special_para_prob": 0.5,
+    "special_para_prob": 0.8,
     "max_func_use_terms": 1,
-    "special_func_use_cnt": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    "special_func_use_cnt": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     "special_func_use_prob": 0.95,
 }
 
@@ -280,7 +281,6 @@ def _generate_expression(variable: List[sp.Expr], max_depth: int = 1, complexity
                 cos_expr: sp.Expr = sp.cos(_generate_expression(variable, max_depth-1, nxt_cmpl)) ** power
             cos_factors.append(cos_expr)
         global ret
-        global _g, _h
         func_factors = []
         if ret and len(exception) != 2:
             func_num: int = _custom_random(
@@ -525,6 +525,8 @@ def _find_matching_paren(expr, open_pos, comma=False):
 def generate_function_problem():
     global _x, _y
     global _g, _h
+    global func_locals
+    func_locals = {}
     func_num: int = _custom_random(
         0,
         max(1, _CONFIG["max_func_terms"]),
@@ -566,16 +568,25 @@ def generate_function_problem():
             abort = [_g] if func_name == "g" else [_h]
         expr = _generate_expression(generate_paras, 0.3, exception=abort)
         ret[func_name]["expr"] = expr
+        expr_str = f"{expr}"
+        if func_locals and expr.has(_g if func_name == "h" else _h):
+            expr = sp.sympify(expr_str, locals=func_locals)
+
+        def create_func(expr, u, v=None):
+            if v is None:
+                return partial(lambda a: expr.subs({u: a}))
+            return partial(lambda a, b: expr.subs({u: a, v: b}))
+
+        # 赋值时创建独立作用域
         if ret[func_name]["para_num"] == 1:
             u = generate_paras[0]
-            ret[func_name]["func"] = lambda a: expr.subs({u: a})
+            ret[func_name]["func"] = create_func(expr, u)
         else:
             u = generate_paras[0]
             v = generate_paras[1]
-            ret[func_name]["func"] = lambda a, b: expr.subs({u: a, v: b})
+            ret[func_name]["func"] = create_func(expr, u, v)
 
-
-
+        func_locals[func_name] = ret[func_name]["func"]
 def generate_recursive_problem() -> Optional[Dict[str, Any]]:
     """
     主函数，用于生成和求解递推式问题
@@ -594,9 +605,7 @@ def generate_recursive_problem() -> Optional[Dict[str, Any]]:
     _x, _y = sp.symbols('x y')
     generate_function_problem()
     # pprint.pprint(ret)
-    func_locals = {}
-    for key in ret.keys():
-        func_locals[key] = ret[key]["func"]
+    global func_locals
     # f{n}(x, y) = a * f{n-1}(g(x, y), h(x, y)) + b * f{n-2}(w(x, y), v(x, y)) + i(x, y)
 
     g = _generate_expression([_x, _y], 1, 0.5)
@@ -705,14 +714,15 @@ def update_config(new_config: Dict[str, Any]) -> None:
             print(f"警告: 配置项 '{key}' 不存在，将被忽略")
 
 if __name__ == "__main__":
-    res = generate_recursive_problem()
-    def_str = [res["definition"]["f0"], res["definition"]["f1"], res["definition"]["fn"]]
-    random.shuffle(def_str)
-    func_str = "\n".join(res["self_func"])
-    if func_str != "":
-        func_str = func_str + "\n"
-    que_str = f"{len(res['self_func'])}\n" + f"{func_str}" + "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
-    ans_str = res['result']
-    pprint.pprint(res)
-    print(que_str)
-    pass
+    while True:
+        res = generate_recursive_problem()
+        def_str = [res["definition"]["f0"], res["definition"]["f1"], res["definition"]["fn"]]
+        random.shuffle(def_str)
+        func_str = "\n".join(res["self_func"])
+        if func_str != "":
+            func_str = func_str + "\n"
+        que_str = f"{len(res['self_func'])}\n" + f"{func_str}" + "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
+        ans_str = res['result']
+        pprint.pprint(res)
+        print(que_str)
+        pass
