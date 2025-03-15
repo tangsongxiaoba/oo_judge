@@ -465,14 +465,14 @@ def _add_extra_parentheses(expr):
             
             i = closing_paren_pos + 1
         elif i + 1 < len(expr) and (expr[i] == "g" or expr[i] == "h") and expr[i+1] == '(':
-            result += f"{expr[i]}("
+            result += f"({expr[i]}("
             open_paren_pos = i + 1
             if ret[expr[i]]["para_num"] == 1:
                 extra, closing_paren_pos = _find_matching_paren(expr, open_paren_pos)
                 
                 # 递归处理括号内的内容
                 inner_content = _add_extra_parentheses(expr[open_paren_pos+1:closing_paren_pos])
-                result += "(" + inner_content + "))"
+                result += "(" + inner_content + ")))"
             else :
                 extra, closing_paren_pos = _find_matching_paren(expr, open_paren_pos, True)
                 # 递归处理括号内的内容
@@ -482,7 +482,7 @@ def _add_extra_parentheses(expr):
                 open_paren_pos = closing_paren_pos
                 extra, closing_paren_pos = _find_matching_paren(expr, open_paren_pos, False)
                 inner_content = _add_extra_parentheses(expr[open_paren_pos+1:closing_paren_pos])
-                result += "(" + inner_content + "))"
+                result += "(" + inner_content + ")))"
             
             i = closing_paren_pos + 1
         else:
