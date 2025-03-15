@@ -63,6 +63,7 @@ class TestGenerator:
             if func_str != "":
                 func_str = func_str + "\n"
             que_str = f"{len(res['self_func'])}\n" + f"{func_str}" + "1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
+            # que_str = "0\n1\n" + def_str[0] + '\n' + def_str[1] + '\n' + def_str[2] + '\n' + f"{res['actual_call']}({res['args'][0]},{res['args'][1]})"
             ans_str = res['result']
             return que_str, ans_str
 
