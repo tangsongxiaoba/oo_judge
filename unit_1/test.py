@@ -1,5 +1,6 @@
 # test.py
 import os
+import signal
 import time
 import importlib
 import subprocess
@@ -7,6 +8,7 @@ import concurrent.futures
 import random
 import mpmath
 import numpy as np
+import psutil
 import sympy
 from sympy import symbols, expand, Poly, Eq
 
@@ -36,7 +38,7 @@ class JarTester:
                                       stdout=subprocess.PIPE,
                                       stderr=subprocess.PIPE,
                                       text=True)
-            
+            pid = process.pid
             stdout, stderr = process.communicate(input=input_expr, timeout=10)
             
             execution_time = time.time() - start_time
@@ -46,7 +48,23 @@ class JarTester:
             else:
                 return jar_path, None, execution_time, f"JAR execution error: {stderr}"
         except subprocess.TimeoutExpired:
+            
+            # 如果进程仍然存在，递归终止
+            if psutil.pid_exists(pid):
+                print(f"Process {pid} still exists, force killing...")
+                def kill_process_tree(pid):
+                    try:
+                        parent = psutil.Process(pid)
+                        for child in parent.children(recursive=True):
+                            child.terminate()
+                        parent.terminate()
+                    except psutil.NoSuchProcess:
+                        pass
+
+                kill_process_tree(pid)
             process.kill()
+            process.wait()  # 确保 kill 生效
+
             return jar_path, None, 10, "JAR execution timeout"
         except Exception as e:
             return jar_path, None, 0, f"Error running JAR: {e}"
