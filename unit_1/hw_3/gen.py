@@ -56,6 +56,7 @@ class TestGenerator:
             ans_str = TestGenerator._parse_expression_with_sympy(exp_str)
             return que_str, ans_str
         elif choice < 0.7:
+        # if True:
             res = func.generate_recursive_problem()
             def_str = [res["definition"]["f0"], res["definition"]["f1"], res["definition"]["fn"]]
             random.shuffle(def_str)

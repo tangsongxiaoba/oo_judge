@@ -54,9 +54,9 @@ _CONFIG: Dict[str, Any] = {
     "special_const": [0, 1, -1, 666, -114514],     # 特殊常数
     "special_const_prob": 0.3,       # 选择特殊常数的概率
     
-    "max_n": 3,                      # 递推式最大n值
-    "special_n": [0, 1, 0, 1, 1, 0, 0, 2, 2, 1, 0, 1, 1, 0, 1, 2, 2, 1, 1, 1],          # 特殊n值
-    "special_n_prob": 0.9,           # 选择特殊n值的概率
+    "max_n": 2,                      # 递推式最大n值
+    "special_n": [0, 1, 0, 1, 1, 0, 0, 2, 2, 1, 0, 1, 1, 0, 1, 2, 2, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 2, 0, 1, 2, 0, 2, 2, 2, 3],          # 特殊n值
+    "special_n_prob": 0.2,           # 选择特殊n值的概率
     
     "max_depth": 0,                  # 嵌套调用最大深度
     "skip_nesting_prob": 0.3,        # 跳过嵌套的概率
@@ -70,9 +70,11 @@ _CONFIG: Dict[str, Any] = {
     # 自定义函数属性
     "max_func_terms": 2,
     "special_func_cnt": [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 2],
-    "special_func_prob": 0.8,
+    # "special_func_cnt": [2],
+    "special_func_prob": 0.9,
     "max_para_terms": 2,
     "special_para_cnt": [1, 1, 2, 1, 1,1, 1,1,1,1,1,1,1,1,1,1,1, 1, 2, 1, 2, 1, 1, 2, 1],
+    # "special_para_cnt": [2],
     "special_para_prob": 0.8,
     "max_func_use_terms": 1,
     "special_func_use_cnt": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -527,6 +529,12 @@ def generate_function_problem():
     global _g, _h
     global func_locals
     func_locals = {}
+    u, v, a, b = sp.symbols("u v a b")
+    formal_paras = [
+        [u, v],
+        [a, b]
+    ]
+    str2para = {"x": _x, "y": _y}
     func_num: int = _custom_random(
         0,
         max(1, _CONFIG["max_func_terms"]),
@@ -544,7 +552,7 @@ def generate_function_problem():
         func_name = func_names[i]["func_name"]
         ret[func_name] = {}
         ret[func_name]["true_func"] = func_names[i]["true_func"]
-        paras = [_x, _y]
+        paras = formal_paras[i][:]
         para_num: int = _custom_random(
             1,
             max(1, _CONFIG["max_para_terms"]),
@@ -555,11 +563,11 @@ def generate_function_problem():
         if para_num == 2:
             random.shuffle(paras)
             generate_paras = paras
-            ret[func_name]["paras"] = ["x", "y"] if generate_paras[0] == _x else ["y", "x"]
+            ret[func_name]["paras"] = ["x", "y"] if generate_paras[0] == formal_paras[i][0] else ["y", "x"]
             ret[func_name]["para_num"] = 2
         else:
             generate_paras.append(random.choice(paras))
-            ret[func_name]["paras"] = ["x"] if generate_paras[0] == _x else ["y"]
+            ret[func_name]["paras"] = ["x"] if generate_paras[0] == formal_paras[i][0] else ["y"]
             ret[func_name]["para_num"] = 1
         abort = []
         if i == 0:
@@ -567,9 +575,13 @@ def generate_function_problem():
         else:
             abort = [_g] if func_name == "g" else [_h]
         expr = _generate_expression(generate_paras, 0.3, exception=abort)
-        ret[func_name]["expr"] = expr
+        ret[func_name]["true_expr"] = expr
+        ret[func_name]["expr"] = expr.subs({generate_paras[i]:str2para[ret[func_name]["paras"][i]] for i in range(para_num)})
         expr_str = f"{expr}"
         if func_locals and expr.has(_g if func_name == "h" else _h):
+            func_list = ret["g" if func_name == "h" else "h"]["paras"]
+            if len(func_list) == 2 and func_list[0] == "y":
+                print("yes")
             expr = sp.sympify(expr_str, locals=func_locals)
 
         def create_func(expr, u, v=None):
@@ -585,7 +597,7 @@ def generate_function_problem():
             u = generate_paras[0]
             v = generate_paras[1]
             ret[func_name]["func"] = create_func(expr, u, v)
-
+        ret[func_name]["formal_paras"] = generate_paras[:]
         func_locals[func_name] = ret[func_name]["func"]
 def generate_recursive_problem() -> Optional[Dict[str, Any]]:
     """
@@ -726,3 +738,4 @@ if __name__ == "__main__":
         pprint.pprint(res)
         print(que_str)
         pass
+        # break

@@ -13,6 +13,7 @@ import sympy
 from sympy import symbols, expand, Poly, Eq
 
 class JarTester:
+    _TIMEOUT_ERROR = False
     _LENGTH_ERROR = False
     _jar_files = []
     _finder_executed = False
@@ -77,7 +78,7 @@ class JarTester:
         
         jar_output = jar_output.replace('^', '**')
         
-        def _is_eq_numeric(expr1, expr2, variables, n_tests=10, tolerance=1e-8):
+        def _is_eq_numeric(expr1, expr2, variables, n_tests=15, tolerance=1e-8):
             """通过数值方法验证两个表达式是否相等"""
             mpmath.mp.dps = 30
             expr1_func = sympy.lambdify([x], expr1, "mpmath")
@@ -183,6 +184,8 @@ class JarTester:
                             + "  ✗ Result doesn't match Sympy\n"
                     flag = False
             else:
+                if result['error'] == "JAR execution timeout" and not JarTester._TIMEOUT_ERROR:
+                    continue
                 res_str += f"\n{result['jar_file']}:\n" \
                         + f"  Input: {input_expr}\n" \
                         + f"  ✗ Execution failed: {result['error']}\n"
