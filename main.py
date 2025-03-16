@@ -86,7 +86,7 @@ class JarProcessor:
     def _read_config():
         """Read config.yml to determine the homework number"""
         try:
-            with open(os.path.join('example','config.yml'), 'r') as file:
+            with open('config.yml', 'r') as file:
                 config = yaml.safe_load(file)
                 return config.get('hw', 1)  # Default to 1 if not specified
         except Exception as e:

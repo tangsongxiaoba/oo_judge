@@ -2,3 +2,4 @@ javalang
 pyyaml
 sympy
 playwright
+psutil
