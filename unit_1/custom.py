@@ -1,15 +1,13 @@
 import random
 import re
 import sys
-import time
 import subprocess
 import os
-
 import sympy as sp
 
-java_dir = "jar"
-test_file = "test.log"
-std_file = "xxk_ultimate.jar"
+java_dir = "../jar"
+test_file = "" # put stdin file here
+std_file = "" # put std.jar here
 jars = []
 
 print("TEST: ")
