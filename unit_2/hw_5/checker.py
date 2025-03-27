@@ -492,8 +492,8 @@ if __name__ == "__main__":
         else:
              print(f" WT (Weighted Avg Completion Time): FAILED TO CALCULATE")
         print(f" W (Power Consumption): {power:.4f}")
-        if wt is not None:
-            print(f"Weighted Total Score(the less the better): {(t_final * 3 + wt * 3 + power * 4):.4f}")
+        # if wt is not None:
+            # print(f"Weighted Total Score(the less the better): {(t_final * 3 + wt * 3 + power * 4):.4f}")
         print("-" * 15)
         # print("Note: Final performance score 's' requires statistics across all submissions and is not calculated here.")
     else:

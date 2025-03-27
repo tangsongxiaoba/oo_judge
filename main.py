@@ -17,19 +17,24 @@ class JarProcessor:
         # Create necessary directories
         JarProcessor._create_directories()
         
+        # Read config file
+        config = JarProcessor._read_config()
+        hw_number = config.get('hw', 1)
+        class_path = config.get('class_path', None)
+        
+        print(f"Homework number from config: {hw_number}")
+        if class_path:
+            print(f"Class path from config: {class_path}")
+        
         # Check if there are JAR files; if not, compile ZIPs
         jars = JarProcessor._get_jars()
         if not jars:
             print("No JAR files found in jar/ directory. Checking for ZIP files...")
-            JarProcessor._compile_zips()
+            JarProcessor._compile_zips(class_path)
             jars = JarProcessor._get_jars()
             if not jars:
                 print("No JAR files available after compilation. Exiting.")
                 sys.exit(1)
-        
-        # Read homework number from config
-        hw_number = JarProcessor._read_config()
-        print(f"Homework number from config: {hw_number}")
         
         # Determine which unit to use
         unit_number = JarProcessor._determine_unit(hw_number)
@@ -54,7 +59,7 @@ class JarProcessor:
         return [f for f in os.listdir('jar') if f.endswith('.jar')]
 
     @staticmethod
-    def _compile_zips():
+    def _compile_zips(class_path=None):
         """Compile all ZIP files in zip/ directory and move resulting JARs to jar/"""
         if not os.path.exists('zip'):
             return
@@ -66,7 +71,7 @@ class JarProcessor:
             os.chdir('zip')
             
             # Use the JavaProjPackager to compile the ZIP files
-            JavaProjPackager.package()
+            JavaProjPackager.package(class_path)
             
             # Move back to the original directory
             os.chdir(original_dir)
@@ -84,15 +89,15 @@ class JarProcessor:
 
     @staticmethod
     def _read_config():
-        """Read config.yml to determine the homework number"""
+        """Read config.yml to determine the homework number and class path"""
         try:
             with open('config.yml', 'r') as file:
                 config = yaml.safe_load(file)
-                return config.get('hw', 1)  # Default to 1 if not specified
+                return config or {}  # Return empty dict if None
         except Exception as e:
             print(f"Error reading config.yml: {e}")
-            print("Defaulting to hw=1")
-            return 1
+            print("Using default settings")
+            return {}
 
     @staticmethod
     def _determine_unit(hw_number):

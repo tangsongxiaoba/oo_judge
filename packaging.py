@@ -2,7 +2,8 @@ import os
 import zipfile
 import javalang
 import subprocess
-import shutil  # Added for directory removal
+import shutil
+import tempfile
 
 class JavaProjPackager:
     @staticmethod
@@ -31,7 +32,19 @@ class JavaProjPackager:
         return None
 
     @staticmethod
-    def _compile_and_package_java_project(project_dir, jar_name):
+    def _extract_jar_contents(jar_path, target_dir):
+        """Extract the contents of a JAR file to a target directory"""
+        try:
+            with zipfile.ZipFile(jar_path, 'r') as jar_file:
+                jar_file.extractall(target_dir)
+            print(f"Extracted JAR contents from {jar_path} to {target_dir}")
+            return True
+        except Exception as e:
+            print(f"Error extracting JAR: {e}")
+            return False
+
+    @staticmethod
+    def _compile_and_package_java_project(project_dir, jar_name, class_path=None):
         """编译Java项目并打包成JAR文件"""
         main_class_info = JavaProjPackager._find_main_class(project_dir)
         if not main_class_info:
@@ -40,19 +53,56 @@ class JavaProjPackager:
 
         main_class_path, class_name = main_class_info
         src_path = os.path.dirname(main_class_path)
+        
+        # 获取类路径的完整路径
+        jar_path = None
+        if class_path:
+            # 获取当前工作目录的绝对路径，然后返回到项目根目录（因为此时我们在zip目录下）
+            current_dir = os.getcwd()
+            root_dir = os.path.dirname(current_dir)
+            jar_path = os.path.join(root_dir, class_path)
+            
+            if not os.path.exists(jar_path):
+                print(f"Warning: Class path JAR not found: {jar_path}")
+                jar_path = None
+            else:
+                print(f"Using class path: {jar_path}")
+                
+                # 将依赖JAR中的内容提取到项目目录
+                if jar_path:
+                    JavaProjPackager._extract_jar_contents(jar_path, project_dir)
+        
+        # 准备编译命令
+        compile_command = ["javac", "-Xlint:unchecked", "-nowarn", "-encoding", "UTF-8", "-d", project_dir, main_class_path, "-sourcepath", src_path]
+        
+        # 如果有类路径，添加到编译命令
+        if jar_path:
+            compile_command.extend(["-classpath", jar_path])
+        
         # 编译Java项目
-        compile_command = ["javac", "-Xlint:unchecked", "-nowarn", "-encoding", "UTF-8","-d", project_dir, main_class_path, "-sourcepath", src_path]
         try:
             subprocess.run(compile_command, check=True)
         except subprocess.CalledProcessError as e:
             print(f"Error: Failed to compile Java project: {e}")
             return False
-        os.makedirs(f"{project_dir}\\META-INF", exist_ok=True)
-        with open(f"{project_dir}\\META-INF\\MANIFEST.MF", "w") as f:
-            f.write(f"Manifest-Version: 1.0\nMain-Class: {class_name}\n")
-            f.close()
+            
+        # 创建MANIFEST.MF文件目录
+        manifest_dir = os.path.join(project_dir, "META-INF")
+        os.makedirs(manifest_dir, exist_ok=True)
+        
+        # 创建MANIFEST.MF文件内容
+        manifest_content = [
+            "Manifest-Version: 1.0",
+            f"Main-Class: {class_name}"
+        ]
+        
+        # 写入MANIFEST.MF文件
+        manifest_path = os.path.join(manifest_dir, "MANIFEST.MF")
+        with open(manifest_path, "w") as f:
+            f.write("\n".join(manifest_content) + "\n")
+            
         # 打包成JAR文件
-        jar_command = ["jar", "cfm", jar_name, f"{project_dir}\\META-INF\\MANIFEST.MF", "-C", project_dir, "."]
+        jar_command = ["jar", "cfm", jar_name, manifest_path, "-C", project_dir, "."]
         try:
             subprocess.run(jar_command, check=True)
             print(f"Success: JAR file '{jar_name}' created successfully.")
@@ -62,7 +112,7 @@ class JavaProjPackager:
             return False
 
     @staticmethod
-    def _process_zip_files():
+    def _process_zip_files(class_path=None):
         """查找并处理同目录下的所有ZIP文件"""
         current_dir = os.getcwd()
         for file in os.listdir(current_dir):
@@ -76,7 +126,7 @@ class JavaProjPackager:
                 
                 # 编译并打包Java项目
                 jar_name = os.path.splitext(file)[0] + ".jar"
-                success = JavaProjPackager._compile_and_package_java_project(extract_dir, jar_name)
+                success = JavaProjPackager._compile_and_package_java_project(extract_dir, jar_name, class_path)
                 
                 # 删除解压后的文件夹
                 try:
@@ -86,8 +136,9 @@ class JavaProjPackager:
                     print(f"Warning: Failed to delete directory {extract_dir}: {e}")
 
     @staticmethod
-    def package():
-        JavaProjPackager._process_zip_files()
+    def package(class_path=None):
+        """Package ZIP files into JAR files, optionally using a class path"""
+        JavaProjPackager._process_zip_files(class_path)
 
 if __name__ == "__main__":
     JavaProjPackager.package()
