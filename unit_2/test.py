@@ -24,10 +24,13 @@ DEFAULT_GEN_ARGS = {
     "hce": True,
     "num_requests": 70,
     "max_time": 50,
-    "extreme_floor_ratio": 0.3
+    "extreme_floor_ratio": 0.5,
+    "burst_size": 15,
+    "focus_elevator": 2,
+    "priority_bias": "extremes"
 }
 PERF_P_VALUE = 0.10
-ENABLE_DETAILED_DEBUG = True # Set to True for verbose debugging
+ENABLE_DETAILED_DEBUG = False # Set to True for verbose debugging
 LOG_DIR = "logs" # Define log directory constant
 
 # Helper function for conditional debug printing
@@ -176,7 +179,7 @@ class JarTester:
                     print(f"ERROR: Input feeder: Error closing stdin for PID {pid}: {e}", file=sys.stderr)
                     debug_print(f"Input feeder: Exception during stdin close for PID {pid}", exc_info=True)
             else:
-                 debug_print(f"Input feeder skipping stdin close due to error/interrupt for PID {pid}")
+                debug_print(f"Input feeder skipping stdin close due to error/interrupt for PID {pid}")
 
 
         except Exception as e:
@@ -235,7 +238,7 @@ class JarTester:
         error_flag = threading.Event()
 
         try:
-            # 1. Start Process
+            # 1. Start Process (Same as before)
             debug_print(f"Launching JAR: {jar_basename}")
             process = subprocess.Popen( # Ensure utf-8 for Java communication
                 ['java', '-jar', jar_path], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -245,17 +248,18 @@ class JarTester:
             debug_print(f"JAR {jar_basename} launched with PID {pid}")
             result["status"] = "RUNNING"
             try:
-                 ps_proc = psutil.Process(pid)
-                 debug_print(f"Attached psutil to PID {pid}")
+                ps_proc = psutil.Process(pid)
+                debug_print(f"Attached psutil to PID {pid}")
             except psutil.NoSuchProcess as e_attach:
-                 print(f"ERROR: Process {pid} ({jar_basename}) disappeared immediately after launch.", file=sys.stderr)
-                 debug_print(f"psutil attach failed for PID {pid}", exc_info=True)
-                 result["status"] = "CRASHED"
-                 result["error_details"] = f"Process disappeared immediately: {e_attach}"
-                 error_flag.set()
-                 raise e_attach # Re-raise to jump to the outer finally block
+                # ... (handling immediate disappearance remains the same) ...
+                print(f"ERROR: Process {pid} ({jar_basename}) disappeared immediately after launch.", file=sys.stderr)
+                debug_print(f"psutil attach failed for PID {pid}", exc_info=True)
+                result["status"] = "CRASHED"
+                result["error_details"] = f"Process disappeared immediately: {e_attach}"
+                error_flag.set()
+                raise e_attach # Re-raise to jump to the outer finally block
 
-            # 2. Start I/O Threads
+            # 2. Start I/O Threads (Same as before)
             debug_print(f"Starting I/O threads for PID {pid}")
             input_feeder_thread = threading.Thread(target=JarTester._timed_input_feeder, args=(process, requests_data, feeder_start_event, error_flag), daemon=True)
             stdout_reader_thread = threading.Thread(target=JarTester._output_reader, args=(process.stdout, stdout_queue, "stdout", pid, error_flag), daemon=True)
@@ -276,20 +280,23 @@ class JarTester:
                 try:
                     if not ps_proc.is_running():
                         debug_print(f"Monitor loop {monitor_loops}: ps_proc.is_running() is False for PID {pid}. Breaking.")
+                        # --- MODIFICATION: Set process_exited_normally flag HERE ---
                         if not error_flag.is_set() and not JarTester._interrupted:
-                             debug_print(f"Monitor loop {monitor_loops}: Process {pid} exited cleanly or crashed before limits/errors.")
-                             process_exited_normally = True
+                            debug_print(f"Monitor loop {monitor_loops}: Process {pid} detected as not running. Setting exitedNormally=True.")
+                            process_exited_normally = True
+                        # ---------------------------------------------------------
                         break # Exit monitoring loop
                 except psutil.NoSuchProcess:
-                    debug_print(f"Monitor loop {monitor_loops}: psutil.NoSuchProcess caught for PID {pid}. Breaking.")
-                    if not error_flag.is_set() and not JarTester._interrupted: # Avoid duplicate messages
-                        print(f"WARNING: Monitor loop: Process {pid} ({jar_basename}) disappeared unexpectedly.", file=sys.stderr)
-                        result["status"] = "CRASHED" # Explicitly mark as crashed here
-                        result["error_details"] = "Process disappeared during monitoring."
+                    # This handles cases where the process disappears *before* or *between* is_running() checks
+                    debug_print(f"Monitor loop {monitor_loops}: psutil.NoSuchProcess caught checking is_running() for PID {pid}. Breaking.")
+                    if not error_flag.is_set() and not JarTester._interrupted:
+                        print(f"WARNING: Monitor loop: Process {pid} ({jar_basename}) disappeared unexpectedly (is_running check).", file=sys.stderr)
+                        result["status"] = "CRASHED" # Mark as crashed here
+                        result["error_details"] = "Process disappeared during monitoring (is_running check)."
                     error_flag.set() # Signal threads
                     break # Exit monitoring loop
 
-                # --- Check for External Stop Signals ---
+                # --- Check for External Stop Signals --- (Same as before)
                 if error_flag.is_set():
                     debug_print(f"Monitor loop {monitor_loops}: Error flag is set for PID {pid}. Breaking.")
                     break
@@ -303,28 +310,37 @@ class JarTester:
 
                 # --- Check Resource Limits ---
                 current_wall_time = time.monotonic() - start_wall_time
+                current_cpu_time = result["cpu_time"] # Use last known good value as default
                 try:
+                    # Attempt to get current CPU times
                     cpu_times = ps_proc.cpu_times()
                     current_cpu_time = cpu_times.user + cpu_times.system
+                # --- MODIFICATION START: Handle NoSuchProcess during cpu_times() ---
                 except psutil.NoSuchProcess:
-                    debug_print(f"Monitor loop {monitor_loops}: NoSuchProcess getting CPU times for PID {pid}. Breaking.")
+                    # Process disappeared between is_running() and cpu_times() check.
+                    # This is likely a clean exit caught by the race condition.
+                    # Do NOT mark as CRASHED here. Simply break the loop.
+                    # The exit code will be checked later.
+                    debug_print(f"Monitor loop {monitor_loops}: NoSuchProcess getting CPU times for PID {pid}. Likely exited cleanly. Breaking monitor loop.")
+                    # Set the flag indicating we detected exit here
                     if not error_flag.is_set() and not JarTester._interrupted:
-                        print(f"WARNING: Monitor loop: Process {pid} ({jar_basename}) disappeared between checks.", file=sys.stderr)
+                        process_exited_normally = True
+                    break # Exit monitoring loop
+                # --- MODIFICATION END ---
+                except Exception as e_cpu: # Catch other potential psutil errors
+                    print(f"ERROR: Monitor loop: Unexpected error getting CPU times for PID {pid}: {e_cpu}", file=sys.stderr)
+                    debug_print(f"Monitor loop {monitor_loops}: psutil error getting CPU times for PID {pid}", exc_info=True)
+                    if result["status"] not in ["CRASHED", "TLE", "CTLE", "INTERRUPTED"]: # Avoid overwriting existing error
                         result["status"] = "CRASHED"
-                        result["error_details"] = "Process disappeared during monitoring (CPU time check)."
+                        result["error_details"] = f"Tester error getting CPU time: {e_cpu}"
                     error_flag.set()
                     break
-                except Exception as e_cpu: # Catch other potential psutil errors
-                     print(f"ERROR: Monitor loop: Unexpected error getting CPU times for PID {pid}: {e_cpu}", file=sys.stderr)
-                     debug_print(f"Monitor loop {monitor_loops}: psutil error getting CPU times for PID {pid}", exc_info=True)
-                     result["status"] = "CRASHED"
-                     result["error_details"] = f"Tester error getting CPU time: {e_cpu}"
-                     error_flag.set()
-                     break
 
+                # Update results only if CPU time was successfully retrieved
                 result["cpu_time"] = current_cpu_time
                 result["wall_time"] = current_wall_time
 
+                # Check limits (Same as before)
                 if current_cpu_time > CPU_TIME_LIMIT:
                     debug_print(f"Monitor loop {monitor_loops}: CTLE for PID {pid}")
                     print(f"INFO: Process {pid} ({jar_basename}) exceeded CPU time limit ({current_cpu_time:.2f}s > {CPU_TIME_LIMIT:.2f}s). Terminating.", file=sys.stderr)
@@ -341,15 +357,25 @@ class JarTester:
                     error_flag.set()
                     break
 
-                time.sleep(0.05)
+                time.sleep(0.05) # Same loop delay
 
             # --- End of Monitoring Loop ---
             debug_print(f"Exited monitoring loop for PID {pid} after {monitor_loops} iterations. Status: {result['status']}, ExitedNormally: {process_exited_normally}")
 
+            # Ensure process is terminated if an error occurred or limit exceeded
             if error_flag.is_set() and pid != -1:
-                 debug_print(f"Error flag set, ensuring process tree killed for PID {pid}")
-                 JarTester._kill_process_tree(pid) # Make sure it's gone
+                debug_print(f"Error flag set or limit exceeded, ensuring process tree killed for PID {pid}")
+                # Check if process still exists before killing
+                try:
+                    if psutil.pid_exists(pid):
+                        JarTester._kill_process_tree(pid)
+                    else:
+                        debug_print(f"Process {pid} already gone before kill attempt after loop exit.")
+                except Exception as e_kill_loop:
+                    print(f"WARNING: Error during kill attempt after loop exit for PID {pid}: {e_kill_loop}", file=sys.stderr)
 
+
+            # --- Wait for I/O Threads (Same as before) ---
             debug_print(f"Waiting for I/O threads to finish for PID {pid}")
             thread_join_timeout = 1.0 # Slightly longer join timeout
             if input_feeder_thread: input_feeder_thread.join(timeout=thread_join_timeout)
@@ -357,55 +383,66 @@ class JarTester:
             if stderr_reader_thread: stderr_reader_thread.join(timeout=thread_join_timeout)
             debug_print(f"Finished waiting for I/O threads for PID {pid}")
 
+            # Determine if a final status (like TLE/CTLE/CRASHED/INTERRUPTED) was already set
             final_status_determined = result["status"] not in ["RUNNING", "PENDING"]
 
-            # Update final times regardless of exit reason
-            result["wall_time"] = time.monotonic() - start_wall_time # Final accurate wall time
+            # Update final times (Same as before)
+            result["wall_time"] = time.monotonic() - start_wall_time
             try:
-                 if psutil.pid_exists(pid): result["cpu_time"] = sum(psutil.Process(pid).cpu_times())
-            except psutil.NoSuchProcess: pass # Use last recorded CPU time if gone
+                # Update CPU time one last time if process still exists somehow (unlikely after kill)
+                # or use the last value recorded before exit/kill
+                if psutil.pid_exists(pid):
+                    result["cpu_time"] = sum(psutil.Process(pid).cpu_times())
+            except psutil.NoSuchProcess: pass # Use last recorded time if process gone
 
+            # --- Check Exit Code if process exited normally and no error status set yet ---
+            # This block now correctly handles the case where the loop broke due to NoSuchProcess on cpu_times()
             if process_exited_normally and not final_status_determined:
-                debug_print(f"Process {pid} exited normally. Getting final state and exit code.")
+                debug_print(f"Process {pid} exited normally (flag is True). Getting final state and exit code.")
                 exit_code = None
                 try:
-                    # Get exit code - should return immediately
+                    # Get exit code - should return immediately as process is known to be gone
                     exit_code = process.wait(timeout=0.5)
-                    debug_print(f"Process {pid} exited normally with code: {exit_code}")
+                    debug_print(f"Process {pid} wait() returned exit code: {exit_code}")
                     if exit_code != 0:
+                        # This is a genuine crash (non-zero exit)
                         print(f"WARNING: Process {pid} ({jar_basename}) exited with non-zero code: {exit_code}.", file=sys.stderr)
                         result["status"] = "CRASHED"
                         result["error_details"] = f"Exited with code {exit_code}."
                         final_status_determined = True
-                    # If exit code is 0, status remains RUNNING for checker phase
+                    # If exit code is 0, status remains RUNNING (or PENDING if it never ran) for checker phase
+                    # No need to change status here if exit code is 0
 
                 except subprocess.TimeoutExpired:
-                    print(f"WARNING: Timeout waiting for exit code for PID {pid}, which should have exited normally.", file=sys.stderr)
-                    JarTester._kill_process_tree(pid) # Force kill
-                    if not final_status_determined:
+                    # Should be very unlikely if process_exited_normally is True
+                    print(f"WARNING: Timeout waiting for exit code for PID {pid}, which should have exited.", file=sys.stderr)
+                    # Force kill just in case, although it should be gone
+                    try: JarTester._kill_process_tree(pid)
+                    except Exception: pass
+                    if not final_status_determined: # Check again before overwriting
                         result["status"] = "CRASHED"
                         result["error_details"] = "Process did not report exit code after finishing."
                         final_status_determined = True
                 except Exception as e_final:
                     print(f"WARNING: Error getting final state for PID {pid}: {e_final}", file=sys.stderr)
                     debug_print(f"Exception getting final state for PID {pid}", exc_info=True)
-                    if not final_status_determined:
+                    if not final_status_determined: # Check again
                         result["status"] = "CRASHED"
                         result["error_details"] = f"Error getting final process state: {e_final}"
                         final_status_determined = True
 
         except (psutil.NoSuchProcess) as e_outer:
-              debug_print(f"Outer exception handler: NoSuchProcess for PID {pid} ({jar_basename}). Handled.")
-              if result["status"] not in ["CRASHED", "TLE", "CTLE", "INTERRUPTED"]: # Don't overwrite specific error
-                 result["status"] = "CRASHED"
-                 result["error_details"] = f"Process disappeared: {e_outer}"
-              error_flag.set() # Ensure threads stop
+            debug_print(f"Outer exception handler: NoSuchProcess for PID {pid} ({jar_basename}). Handled.")
+            if result["status"] not in ["CRASHED", "TLE", "CTLE", "INTERRUPTED"]: # Don't overwrite specific error
+                result["status"] = "CRASHED"
+                result["error_details"] = f"Process disappeared: {e_outer}"
+            error_flag.set() # Ensure threads stop
         except FileNotFoundError:
-             print(f"ERROR: Java executable or JAR file '{jar_path}' not found.", file=sys.stderr)
-             debug_print(f"Outer exception handler: FileNotFoundError for JAR {jar_basename}.")
-             result["status"] = "CRASHED"
-             result["error_details"] = f"File not found (Java or JAR)."
-             error_flag.set()
+            print(f"ERROR: Java executable or JAR file '{jar_path}' not found.", file=sys.stderr)
+            debug_print(f"Outer exception handler: FileNotFoundError for JAR {jar_basename}.")
+            result["status"] = "CRASHED"
+            result["error_details"] = f"File not found (Java or JAR)."
+            error_flag.set()
         except Exception as e:
             print(f"FATAL: Error during execution of {jar_basename} (PID {pid}): {e}", file=sys.stderr)
             debug_print(f"Outer exception handler: Unexpected exception for PID {pid}", exc_info=True)
@@ -413,8 +450,8 @@ class JarTester:
             result["error_details"] = f"Tester execution error: {e}"
             error_flag.set()
             if pid != -1 and process and process.poll() is None:
-                 debug_print(f"Outer exception: Ensuring PID {pid} is killed.")
-                 JarTester._kill_process_tree(pid)
+                debug_print(f"Outer exception: Ensuring PID {pid} is killed.")
+                JarTester._kill_process_tree(pid)
 
         finally:
             # --- Cleanup and Output Collection ---
@@ -422,9 +459,9 @@ class JarTester:
             if pid != -1 and process and process.poll() is None: # Check PID existence too
                 try:
                     if psutil.pid_exists(pid):
-                         print(f"WARNING: Final cleanup: Process {pid} still alive? Killing.", file=sys.stderr)
-                         debug_print(f"Final cleanup killing PID {pid}")
-                         JarTester._kill_process_tree(pid)
+                        print(f"WARNING: Final cleanup: Process {pid} still alive? Killing.", file=sys.stderr)
+                        debug_print(f"Final cleanup killing PID {pid}")
+                        JarTester._kill_process_tree(pid)
                     else: debug_print(f"Final cleanup: Process {pid} already gone.")
                 except Exception as e_kill:
                     print(f"ERROR: Exception during final kill for PID {pid}: {e_kill}", file=sys.stderr)
@@ -459,7 +496,7 @@ class JarTester:
                 debug_print(f"Checker using input(gen) '{gen_output_path}' and output(jar) '{temp_output_file}'")
 
                 checker_proc = subprocess.run(
-                     [sys.executable, JarTester._checker_script_path, gen_output_path, temp_output_file, "--tmax", str(CHECKER_TMAX)],
+                    [sys.executable, JarTester._checker_script_path, gen_output_path, temp_output_file, "--tmax", str(CHECKER_TMAX)],
                     capture_output=True, text=True, timeout=30, check=False, encoding='utf-8', errors='replace' # check=False to handle non-zero exit
                 )
                 debug_print(f"Checker for {jar_basename} finished with code {checker_proc.returncode}")
@@ -480,31 +517,31 @@ class JarTester:
                     if details_stderr: result["error_details"] += f" stderr: {details_stderr[:200]}" # Limit length
                     debug_print(f"Checker error for {jar_basename}: Exit code {checker_proc.returncode}")
                 elif "Verdict: CORRECT" in checker_proc.stdout:
-                     result["status"] = "CORRECT"
-                     debug_print(f"Checker result for {jar_basename}: CORRECT")
-                     # --- FIX 1: Extract Metrics ---
-                     try:
-                         t_final_match = re.search(r"\s*T_final.*?:\s*(\d+\.?\d*)", checker_proc.stdout)
-                         wt_match = re.search(r"\s*WT.*?:\s*(\d+\.?\d*)", checker_proc.stdout)
-                         w_match = re.search(r"\s*W.*?:\s*(\d+\.?\d*)", checker_proc.stdout)
-                         if t_final_match: result["t_final"] = float(t_final_match.group(1))
-                         if wt_match: result["wt"] = float(wt_match.group(1))
-                         if w_match: result["w"] = float(w_match.group(1))
-                         debug_print(f"Extracted Metrics for {jar_basename}: T_final={result['t_final']}, WT={result['wt']}, W={result['w']}")
-                         if result["t_final"] is None or result["wt"] is None or result["w"] is None:
-                             print(f"WARNING: Checker verdict CORRECT for {jar_basename}, but couldn't parse all metrics (T_final, WT, W). Score might be 0.", file=sys.stderr)
-                             result["error_details"] = "Correct verdict but failed to parse all metrics from checker."
-                             # Keep status CORRECT, but score will likely be 0 due to missing metrics in _calculate_scores
-                     except ValueError as e_parse:
-                         print(f"ERROR: Checker verdict CORRECT for {jar_basename}, but failed parsing metrics: {e_parse}", file=sys.stderr)
-                         result["status"] = "CHECKER_ERROR" # Treat parsing failure as error
-                         result["error_details"] = f"Correct verdict but metric parsing failed: {e_parse}"
-                         result["t_final"] = result["wt"] = result["w"] = None # Ensure reset
-                     except Exception as e_re:
-                         print(f"ERROR: Regex error during metric parsing for {jar_basename}: {e_re}", file=sys.stderr)
-                         result["status"] = "CHECKER_ERROR"
-                         result["error_details"] = f"Internal tester error (regex) parsing metrics: {e_re}"
-                         result["t_final"] = result["wt"] = result["w"] = None # Ensure reset
+                    result["status"] = "CORRECT"
+                    debug_print(f"Checker result for {jar_basename}: CORRECT")
+                    # --- FIX 1: Extract Metrics ---
+                    try:
+                        t_final_match = re.search(r"\s*T_final.*?:\s*(\d+\.?\d*)", checker_proc.stdout)
+                        wt_match = re.search(r"\s*WT.*?:\s*(\d+\.?\d*)", checker_proc.stdout)
+                        w_match = re.search(r"^\s*W\s+\(Power Consumption\):\s*(\d+\.?\d*)", checker_proc.stdout, re.MULTILINE)
+                        if t_final_match: result["t_final"] = float(t_final_match.group(1))
+                        if wt_match: result["wt"] = float(wt_match.group(1))
+                        if w_match: result["w"] = float(w_match.group(1))
+                        debug_print(f"Extracted Metrics for {jar_basename}: T_final={result['t_final']}, WT={result['wt']}, W={result['w']}")
+                        if result["t_final"] is None or result["wt"] is None or result["w"] is None:
+                            print(f"WARNING: Checker verdict CORRECT for {jar_basename}, but couldn't parse all metrics (T_final, WT, W). Score might be 0.", file=sys.stderr)
+                            result["error_details"] = "Correct verdict but failed to parse all metrics from checker."
+                            # Keep status CORRECT, but score will likely be 0 due to missing metrics in _calculate_scores
+                    except ValueError as e_parse:
+                        print(f"ERROR: Checker verdict CORRECT for {jar_basename}, but failed parsing metrics: {e_parse}", file=sys.stderr)
+                        result["status"] = "CHECKER_ERROR" # Treat parsing failure as error
+                        result["error_details"] = f"Correct verdict but metric parsing failed: {e_parse}"
+                        result["t_final"] = result["wt"] = result["w"] = None # Ensure reset
+                    except Exception as e_re:
+                        print(f"ERROR: Regex error during metric parsing for {jar_basename}: {e_re}", file=sys.stderr)
+                        result["status"] = "CHECKER_ERROR"
+                        result["error_details"] = f"Internal tester error (regex) parsing metrics: {e_re}"
+                        result["t_final"] = result["wt"] = result["w"] = None # Ensure reset
                      # ------------------------------
                 else:
                     result["status"] = "INCORRECT"
@@ -514,18 +551,18 @@ class JarTester:
                     debug_print(f"Checker result for {jar_basename}: INCORRECT. Details: {result['error_details']}")
 
             except subprocess.TimeoutExpired:
-                 print(f"ERROR: Checker timed out for {jar_basename}.", file=sys.stderr)
-                 result["status"] = "CHECKER_ERROR"
-                 result["error_details"] = "Checker process timed out."
+                print(f"ERROR: Checker timed out for {jar_basename}.", file=sys.stderr)
+                result["status"] = "CHECKER_ERROR"
+                result["error_details"] = "Checker process timed out."
             except Exception as e_check:
-                 print(f"ERROR: Exception running checker for {jar_basename}: {e_check}", file=sys.stderr)
-                 debug_print(f"Checker exception for {jar_basename}", exc_info=True)
-                 result["status"] = "CHECKER_ERROR"
-                 result["error_details"] = f"Exception during checker execution: {e_check}"
+                print(f"ERROR: Exception running checker for {jar_basename}: {e_check}", file=sys.stderr)
+                debug_print(f"Checker exception for {jar_basename}", exc_info=True)
+                result["status"] = "CHECKER_ERROR"
+                result["error_details"] = f"Exception during checker execution: {e_check}"
             finally:
-                 if temp_output_file and os.path.exists(temp_output_file):
-                     try: os.remove(temp_output_file)
-                     except Exception as e_rm: print(f"WARNING: Failed to remove temp checker output file {temp_output_file}: {e_rm}", file=sys.stderr)
+                if temp_output_file and os.path.exists(temp_output_file):
+                    try: os.remove(temp_output_file)
+                    except Exception as e_rm: print(f"WARNING: Failed to remove temp checker output file {temp_output_file}: {e_rm}", file=sys.stderr)
 
         elif JarTester._interrupted and result["status"] == "RUNNING":
              result["status"] = "INTERRUPTED" # Mark as interrupted if checker was skipped due to Ctrl+C
@@ -973,7 +1010,7 @@ class JarTester:
 
                 if requests_data is None: # Check only data, path might exist even on failure
                     print("ERROR: Failed to generate data for this round. Skipping.", file=sys.stderr)
-                    # No temporary file to remove here
+                    if JarTester._interrupted: break
                     time.sleep(2) # Pause before retrying or exiting
                     continue # Skip to next round or exit loop if interrupted
                 debug_print(f"Round {JarTester._test_count}: Generated {len(requests_data)} requests to '{current_request_file_path}'")
@@ -1017,8 +1054,8 @@ class JarTester:
                                 print(f'\nERROR: JAR {jar_basename} generated an unexpected exception in tester thread: {exc}', file=sys.stderr)
                                 debug_print(f"Exception from future for {jar_basename}", exc_info=True)
                                 results.append({ "jar_file": jar_basename, "status": "CRASHED", "final_score": 0.0, "error_details": f"Tester thread exception: {exc}", "cpu_time": 0, "wall_time": 0, "t_final": None, "wt": None, "w": None, "stdout": [], "stderr": []})
-                                completed_count += 1
                                 print(f"Progress: {completed_count}/{len(future_to_jar)} completed ({jar_basename}: CRASHED)...", end='\r', flush=True)
+                                completed_count += 1
 
 
                     except KeyboardInterrupt: # Catch Ctrl+C during the as_completed loop

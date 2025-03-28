@@ -17,7 +17,7 @@ MID_PRIORITY = (MIN_PRIORITY + MAX_PRIORITY) // 2 # ~50
 DEFAULT_NUM_REQUESTS = 20
 DEFAULT_MAX_TIME = 50.0
 DEFAULT_MIN_INTERVAL = 0.0
-DEFAULT_MAX_INTERVAL = 2.0
+DEFAULT_MAX_INTERVAL = 1.4
 DEFAULT_START_TIME = 1.0
 DEFAULT_PRIORITY_MIDDLE_RANGE = 20 # Default range for 'middle' bias (e.g., 40-60)
 
@@ -359,7 +359,7 @@ def main():
     )
     parser.add_argument(
         "--burst-time", type=float, default=None,
-        help="Approximate timestamp for the burst (defaults to mid-point if burst-size > 0)."
+        help="Approximate timestamp for the burst (defaults to mid-point between start/max-time if burst-size > 0 and this is not set)."
     )
     parser.add_argument(
         "--extreme-floor-ratio", type=float, default=0.0,
@@ -373,8 +373,6 @@ def main():
         "--focus-ratio", type=float, default=0.7,
         help="Probability (0.0 to 1.0) of assigning to focus-elevator (if set) (default: 0.7)."
     )
-
-    # --- UPDATED Priority Parameters ---
     parser.add_argument(
         "--priority-bias", choices=['none', 'extremes', 'middle'], default='none',
         help="Bias request priority: 'none' (uniform), 'extremes' (1 or 100), 'middle' (around 50) (default: none)."
@@ -383,23 +381,26 @@ def main():
         "--priority-bias-ratio", type=float, default=0.5,
         help="Probability (0.0 to 1.0) of applying the priority bias (if not 'none') (default: 0.5)."
     )
-    parser.add_argument( # NEW
+    parser.add_argument(
         "--priority-middle-range", type=int, default=DEFAULT_PRIORITY_MIDDLE_RANGE,
         help=f"Approximate range width for 'middle' priority bias (e.g., 20 targets ~40-60) (default: {DEFAULT_PRIORITY_MIDDLE_RANGE})."
     )
 
-
     args = parser.parse_args()
 
     # --- Argument Validation (Basic) ---
-    # (Remains the same)
     if args.num_requests <= 0:
          print("WARNING: Number of requests should ideally be positive.", file=sys.stderr)
     if args.max_time < args.start_time:
         print("ERROR: Max time cannot be less than start time.", file=sys.stderr)
         sys.exit(1)
-    # (...) other basic validations
-
+    if args.burst_size > 0 and args.burst_time is None:
+        # Calculate midpoint time, ensuring float division
+        default_burst_time = (args.start_time + args.max_time) / 2.0
+        # Clamp the default burst time within the valid range just in case
+        default_burst_time = max(args.start_time, min(default_burst_time, args.max_time))
+        args.burst_time = default_burst_time
+        print(f"INFO: --burst-size > 0 and --burst-time not specified. Defaulting burst time to midpoint: {args.burst_time:.1f}", file=sys.stderr)
 
     # --- Generate Data ---
     generated_requests = generate_data(
@@ -417,7 +418,6 @@ def main():
         extreme_floor_ratio=args.extreme_floor_ratio,
         focus_elevator=args.focus_elevator,
         focus_ratio=args.focus_ratio,
-        # Pass new priority args
         priority_bias=args.priority_bias,
         priority_bias_ratio=args.priority_bias_ratio,
         priority_middle_range=args.priority_middle_range
@@ -428,7 +428,6 @@ def main():
         sys.exit(1)
 
     # --- Output ---
-    # (Remains the same)
     output_content = "\n".join(generated_requests)
     if args.output_file:
         try:
