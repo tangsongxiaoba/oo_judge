@@ -843,18 +843,26 @@ class JarTester:
             history['scores'].append(score_to_add)
             # debug_print(f"History update for {jar_name}: Total={history['total_runs']}, Correct={history['correct_runs']}, Added Score={score_to_add}")
 
+      
+# --- START OF Method JarTester._print_summary ---
     @staticmethod
     def _print_summary():
-        """Prints the average scores upon interruption or normal completion."""
-        if JarTester._interrupted: print("\n--- Testing Interrupted ---")
-        else: print("\n--- Testing Finished ---")
-        print(f"Total test rounds attempted: {JarTester._test_count}")
-        if not JarTester._all_results_history:
-            print("No completed test results recorded.")
-            return
+        """Generates the final summary string."""
+        summary_lines = [] # Store lines instead of printing directly
 
-        print("\n--- Average Performance Summary (Based on Completed Rounds) ---")
-        summary = []
+        if JarTester._interrupted:
+            summary_lines.append("\n--- Testing Interrupted ---")
+        else:
+            summary_lines.append("\n--- Testing Finished ---")
+
+        summary_lines.append(f"Total test rounds attempted: {JarTester._test_count}")
+
+        if not JarTester._all_results_history:
+            summary_lines.append("No completed test results recorded.")
+            return "\n".join(summary_lines) # Return the generated lines
+
+        summary_lines.append("\n--- Average Performance Summary (Based on Completed Rounds) ---")
+        summary_data = [] # Renamed from 'summary' to avoid conflict
         for jar_name, data in JarTester._all_results_history.items():
             total_runs = data['total_runs']
             correct_runs = data['correct_runs']
@@ -863,19 +871,24 @@ class JarTester:
             avg_score = np.mean(valid_scores) if valid_scores else 0.0
             correct_rate = (correct_runs / total_runs * 100) if total_runs > 0 else 0.0
             avg_score = avg_score if not np.isnan(avg_score) else 0.0
-            summary.append({
+            summary_data.append({
                 "jar": jar_name, "avg_score": avg_score, "correct_rate": correct_rate,
                 "correct": correct_runs, "total": total_runs
             })
-        summary.sort(key=lambda x: (-x["avg_score"], -x["correct_rate"]))
+        summary_data.sort(key=lambda x: (-x["avg_score"], -x["correct_rate"]))
+
         header = f"{'JAR':<25} | {'Avg Score':<10} | {'Correct %':<10} | {'Passed/Total':<15}"
-        print(header)
-        print("-" * len(header))
-        for item in summary:
+        summary_lines.append(header)
+        summary_lines.append("-" * len(header))
+
+        for item in summary_data:
              passed_total_str = f"{item['correct']}/{item['total']}"
              line = f"{item['jar']:<25} | {item['avg_score']:<10.3f} | {item['correct_rate']:<10.1f}% | {passed_total_str:<15}"
-             print(line)
-        print("-" * len(header))
+             summary_lines.append(line)
+
+        summary_lines.append("-" * len(header))
+        return "\n".join(summary_lines) # Return the complete summary string
+# --- END OF Method JarTester._print_summary ---
 
     @staticmethod
     def _signal_handler(sig, frame):
@@ -976,8 +989,9 @@ class JarTester:
             signal.signal(signal.SIGINT, JarTester._signal_handler)
             print(f"Press Ctrl+C to stop testing gracefully after the current round.")
 
-            # Remove variable tracking the single request file path
-            # current_request_file_path = None
+            print("\n" + "="*40)
+            input("Setup complete. Press Enter to begin testing...")
+            print("="*40 + "\n")
 
             while not JarTester._interrupted:
                 JarTester._test_count += 1
@@ -1093,9 +1107,6 @@ class JarTester:
                     debug_print(f"Round {JarTester._test_count}: Skipping history update due to interrupt.")
                     break
 
-                # 6. Cleanup (input_data_path is now loop-local, no need to clear)
-                # No explicit cleanup of tmp files implemented, as requested.
-
                 if not JarTester._interrupted: time.sleep(1)
 
         except Exception as e:
@@ -1109,14 +1120,24 @@ class JarTester:
                          traceback.print_exc(file=f)
                  except Exception: pass
         finally:
-             JarTester._print_summary()
-             # Optional: Add cleanup logic for TMP_DIR here if desired in the future
-             # try:
-             #     if os.path.exists(TMP_DIR):
-             #          print(f"INFO: Cleaning up temporary directory: {os.path.abspath(TMP_DIR)}")
-             #          # shutil.rmtree(TMP_DIR) # Uncomment to enable cleanup
-             # except Exception as e_clean:
-             #     print(f"WARNING: Failed to clean up temporary directory {TMP_DIR}: {e_clean}", file=sys.stderr)
+            summary = JarTester._print_summary()
+            print(summary)
+            if JarTester._log_file_path:
+                try:
+                    with open(JarTester._log_file_path, "a", encoding="utf-8") as f:
+                        f.write("\n\n" + "="*20 + " FINAL SUMMARY " + "="*20 + "\n") # Add a clear separator
+                        f.write(summary + "\n")
+                        f.write("="* (40 + len(" FINAL SUMMARY ")) + "\n")
+                    debug_print("Final summary also written to log file.")
+                except Exception as e_log_summary:
+                    print(f"ERROR: Failed to write final summary to log file {JarTester._log_file_path}: {e_log_summary}", file=sys.stderr)
+
+            try:
+                if os.path.exists(TMP_DIR) and input("Input 'Confirm' to Delete TMP_DIR: ") == "Confirm":
+                    print(f"INFO: Cleaning up temporary directory: {os.path.abspath(TMP_DIR)}")
+                    shutil.rmtree(TMP_DIR)
+            except Exception as e_clean:
+                print(f"WARNING: Failed to clean up temporary directory {TMP_DIR}: {e_clean}", file=sys.stderr)
 
 
 # --- Main Execution Block ---
