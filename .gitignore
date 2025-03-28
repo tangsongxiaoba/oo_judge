@@ -2,6 +2,7 @@ __pycache__/
 jar/
 zip/
 logs/
+tmp/
 /*.log
 /*.txt
 /*.yml

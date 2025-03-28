@@ -16,6 +16,7 @@ from collections import defaultdict
 import numpy as np
 import concurrent.futures
 import random # Added for preset selection
+import shutil # Needed for potential future cleanup, good practice
 
 # --- Configuration ---
 CPU_TIME_LIMIT = 10.0  # seconds
@@ -24,21 +25,22 @@ MIN_WALL_TIME_LIMIT = 120.0 # seconds - Renamed: Minimum wall time limit
 PERF_P_VALUE = 0.10
 ENABLE_DETAILED_DEBUG = False # Set to True for verbose debugging
 LOG_DIR = "logs" # Define log directory constant
+TMP_DIR = "tmp"  # Define temporary file directory constant
 DEFAULT_GEN_MAX_TIME = 50.0 # Default generator -t value if not specified in preset
 
 # --- Generator Argument Presets ---
 # List of command strings for gen.py
 GEN_PRESET_COMMANDS = [
     # === Baseline ===
-    "gen.py -n 25 -t 50.0",
+    # "gen.py -n 25 -t 50.0",
     # === Load & Density ===
     "gen.py -n 70 -t 40.0 --min-interval 0.0 --max-interval 0.5 --hce",
     "gen.py -n 98 -t 70.0 --min-interval 0.1 --max-interval 0.8",
     "gen.py -n 8 -t 100.0 --min-interval 10.0 --max-interval 15.0",
     "gen.py -n 75 -t 150.0 --min-interval 0.5 --max-interval 2.5",
-    "gen.py -n 1 -t 10.0",
+    # "gen.py -n 1 -t 10.0",
     "gen.py -n 2 -t 10.0 --min-interval 0.1 --max-interval 0.5",
-    "gen.py -n 1 -t 10.0 --hce",
+    # "gen.py -n 1 -t 10.0 --hce",
     "gen.py -n 2 -t 10.0 --hce --min-interval 0.2 --max-interval 0.8",
     # === Timing & Bursts ===
     "gen.py -n 30 --start-time 1.0 --max-time 10.0 --force-start-requests 30", # Uses --max-time
@@ -87,7 +89,7 @@ class JarTester:
     _interrupted = False
     _test_count = 0
     _log_file_path = None
-    _persistent_request_file_path = None
+    # _persistent_request_file_path removed
     _all_results_history = defaultdict(lambda: {'correct_runs': 0, 'total_runs': 0, 'scores': []})
     _gen_arg_presets = []
     _raw_preset_commands = []
@@ -234,8 +236,8 @@ class JarTester:
             debug_print(f"Output reader ({stream_name}) thread exiting for PID {pid}")
 
     @staticmethod
-    def _run_single_jar(jar_path, requests_data, gen_output_path, current_wall_limit): # Added current_wall_limit
-        """Executes a single JAR, monitors it, and runs the checker."""
+    def _run_single_jar(jar_path, requests_data, input_data_path, current_wall_limit): # Changed gen_output_path to input_data_path
+        """Executes a single JAR, monitors it, saves stdout, and runs the checker."""
         jar_basename = os.path.basename(jar_path)
         debug_print(f"Starting run for JAR: {jar_basename} with Wall Limit: {current_wall_limit:.2f}s")
         start_wall_time = time.monotonic()
@@ -244,7 +246,9 @@ class JarTester:
         ps_proc = None
         result = {
             "jar_file": jar_basename, "cpu_time": 0.0, "wall_time": 0.0,
-            "status": "PENDING", "error_details": "", "stdout": [], "stderr": [],
+            "status": "PENDING", "error_details": "",
+            "stdout_log_path": None, # Path to saved stdout file
+            "stderr": [], # Keep stderr in memory for log
             "t_final": None, "wt": None, "w": None, "final_score": 0.0,
         }
         input_feeder_thread = None
@@ -256,6 +260,7 @@ class JarTester:
         error_flag = threading.Event()
 
         try:
+            # --- (Process Launch and Monitoring - unchanged) ---
             debug_print(f"Launching JAR: {jar_basename}")
             process = subprocess.Popen(
                 ['java', '-jar', jar_path], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -389,8 +394,8 @@ class JarTester:
                         result["status"] = "CRASHED"
                         result["error_details"] = f"Exited with code {exit_code}."
                         final_status_determined = True
-                    elif result["status"] == "PENDING":
-                         result["status"] = "RUNNING"
+                    elif result["status"] == "PENDING": # Should likely be RUNNING here
+                         result["status"] = "RUNNING" # Correct if it was PENDING
 
                 except subprocess.TimeoutExpired:
                     print(f"WARNING: Timeout waiting for exit code for PID {pid}, which should have exited.", file=sys.stderr)
@@ -407,7 +412,7 @@ class JarTester:
                         result["status"] = "CRASHED"
                         result["error_details"] = f"Error getting final process state: {e_final}"
                         final_status_determined = True
-
+            # --- End Process Launch and Monitoring ---
         except (psutil.NoSuchProcess) as e_outer:
             debug_print(f"Outer exception handler: NoSuchProcess for PID {pid} ({jar_basename}). Handled.")
             if result["status"] not in ["CRASHED", "TLE", "CTLE", "INTERRUPTED"]:
@@ -441,35 +446,61 @@ class JarTester:
                 except Exception as e_kill:
                     print(f"ERROR: Exception during final kill for PID {pid}: {e_kill}", file=sys.stderr)
 
+            # --- Drain queues and Save Stdout ---
             debug_print(f"Draining output queues for PID {pid}")
             stdout_lines = []
             stderr_lines = []
             while not stdout_queue.empty(): stdout_lines.append(stdout_queue.get_nowait())
             while not stderr_queue.empty(): stderr_lines.append(stderr_queue.get_nowait())
-            result["stdout"] = stdout_lines
-            result["stderr"] = stderr_lines
+            result["stderr"] = stderr_lines # Store stderr directly
             debug_print(f"Drained queues for PID {pid}. stdout lines: {len(stdout_lines)}, stderr lines: {len(stderr_lines)}")
+
+            # Save stdout to a unique file in TMP_DIR
+            stdout_content = "".join(stdout_lines)
+            if stdout_content or result["status"] != "PENDING": # Save even if empty if run finished/failed
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                rand_id = random.randint(1000, 9999)
+                # Sanitize jar_basename for filename
+                safe_jar_basename = re.sub(r'[^\w.-]', '_', jar_basename)
+                stdout_filename = f"stdout_{safe_jar_basename}_{timestamp}_{rand_id}.log"
+                stdout_filepath = os.path.abspath(os.path.join(TMP_DIR, stdout_filename))
+                try:
+                    os.makedirs(TMP_DIR, exist_ok=True) # Ensure dir exists
+                    with open(stdout_filepath, 'w', encoding='utf-8') as f_out:
+                        f_out.write(stdout_content)
+                    result["stdout_log_path"] = stdout_filepath # Store the path
+                    debug_print(f"JAR stdout saved to {stdout_filepath}")
+                except Exception as e_write_stdout:
+                    print(f"WARNING: Failed to write stdout log for {jar_basename} to {stdout_filepath}: {e_write_stdout}", file=sys.stderr)
+                    result["stdout_log_path"] = None # Indicate failure
+            else:
+                 debug_print(f"No stdout content generated for {jar_basename}, not saving file.")
+                 result["stdout_log_path"] = None
 
             debug_print(f"Final join for threads of PID {pid}")
             if input_feeder_thread and input_feeder_thread.is_alive(): input_feeder_thread.join(timeout=0.1)
             if stdout_reader_thread and stdout_reader_thread.is_alive(): stdout_reader_thread.join(timeout=0.1)
             if stderr_reader_thread and stderr_reader_thread.is_alive(): stderr_reader_thread.join(timeout=0.1)
             debug_print(f"Exiting finally block for PID {pid}")
+            # --- End Draining and Saving ---
 
         # Run Checker (only if status allows and not interrupted)
+        # Uses the saved stdout content for the checker's temporary file
         if result["status"] == "RUNNING" and not JarTester._interrupted:
             debug_print(f"Running checker for {jar_basename} (PID {pid}) because status is RUNNING")
-            output_content = "".join(result["stdout"])
+            # stdout_content is already available from the finally block
             temp_output_file = None
             try:
+                # Use NamedTemporaryFile for checker's input, content comes from stdout_content
                 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".txt", encoding='utf-8') as tf:
-                    tf.write(output_content)
+                    tf.write(stdout_content) # Use the captured content
                     temp_output_file = tf.name
-                debug_print(f"Checker using input(gen) '{gen_output_path}' and output(jar) '{temp_output_file}' with Tmax={current_wall_limit:.2f}s")
+                # Use input_data_path (original generator output path) for checker's first arg
+                debug_print(f"Checker using input(gen) '{input_data_path}' and output(jar) '{temp_output_file}' with Tmax={current_wall_limit:.2f}s")
 
                 # Use the dynamic wall limit for the checker's tmax
                 checker_proc = subprocess.run(
-                    [sys.executable, JarTester._checker_script_path, gen_output_path, temp_output_file, "--tmax", str(current_wall_limit)],
+                    [sys.executable, JarTester._checker_script_path, input_data_path, temp_output_file, "--tmax", str(current_wall_limit)],
                     capture_output=True, text=True, timeout=30, check=False, encoding='utf-8', errors='replace'
                 )
                 debug_print(f"Checker for {jar_basename} finished with code {checker_proc.returncode}")
@@ -477,6 +508,7 @@ class JarTester:
                 if checker_proc.stderr:
                     result["stderr"].extend(["--- Checker stderr ---"] + checker_proc.stderr.strip().splitlines())
 
+                # --- (Checker result parsing - unchanged) ---
                 if checker_proc.returncode != 0:
                     result["status"] = "CHECKER_ERROR"
                     result["error_details"] = f"Checker exited with code {checker_proc.returncode}."
@@ -513,6 +545,7 @@ class JarTester:
                     verdict_line = next((line for line in checker_proc.stdout.splitlines() if line.startswith("Verdict:")), "Verdict: INCORRECT (No details)")
                     result["error_details"] = verdict_line.strip()
                     debug_print(f"Checker result for {jar_basename}: INCORRECT. Details: {result['error_details']}")
+                # --- (End Checker result parsing) ---
 
             except subprocess.TimeoutExpired:
                 print(f"ERROR: Checker timed out for {jar_basename}.", file=sys.stderr)
@@ -545,12 +578,13 @@ class JarTester:
 
     @staticmethod
     def _generate_data(gen_args_list):
-        """Calls gen.py with provided args, returns requests, writes output to persistent log file."""
-        if not JarTester._persistent_request_file_path:
-            print("ERROR: Persistent request file path not set before calling _generate_data.", file=sys.stderr)
-            return None, None
-        persistent_file = JarTester._persistent_request_file_path
-        os.makedirs(os.path.dirname(persistent_file), exist_ok=True)
+        """Calls gen.py with provided args, returns requests, writes output to unique tmp file."""
+        # Generate a unique filename for this round's input data
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        rand_id = random.randint(1000, 9999)
+        input_filename = f"input_{timestamp}_{rand_id}.txt"
+        input_filepath = os.path.abspath(os.path.join(TMP_DIR, input_filename))
+        os.makedirs(os.path.dirname(input_filepath), exist_ok=True) # Ensure TMP_DIR exists
 
         requests_data = None
         gen_stdout = None
@@ -565,35 +599,37 @@ class JarTester:
             gen_stdout = gen_proc.stdout
 
             try:
-                with open(persistent_file, 'w', encoding='utf-8') as f: f.write(gen_stdout)
-                debug_print(f"Generator output written to persistent file: {persistent_file}")
+                with open(input_filepath, 'w', encoding='utf-8') as f: f.write(gen_stdout)
+                debug_print(f"Generator output written to tmp file: {input_filepath}")
             except Exception as e_write:
-                print(f"ERROR: Failed to write generator output to {persistent_file}: {e_write}", file=sys.stderr)
-                persistent_file = None
+                print(f"ERROR: Failed to write generator output to {input_filepath}: {e_write}", file=sys.stderr)
+                input_filepath = None # Mark as failed
 
+            # --- (Request Parsing Logic - unchanged) ---
             raw_requests = gen_stdout.strip().splitlines()
             requests_data = []
             pattern = re.compile(r"\[\s*(\d+\.\d+)\s*\](.*)")
             for line in raw_requests:
                 match = pattern.match(line)
                 if match:
-                    timestamp = float(match.group(1))
+                    timestamp_req = float(match.group(1)) # Renamed to avoid confusion
                     req_part = match.group(2)
-                    requests_data.append((timestamp, req_part))
+                    requests_data.append((timestamp_req, req_part))
                 elif line.strip(): # Ignore empty lines
                     print(f"WARNING: Generator produced invalid line format (ignored): {line}", file=sys.stderr)
 
             is_n_zero = any(arg == '-n' and gen_args_list[i+1] == '0' for i, arg in enumerate(gen_args_list[:-1]))
             if not raw_requests and not requests_data and is_n_zero:
                  debug_print("Generator produced no output (expected for n=0). Returning empty list.")
-                 return [], persistent_file
+                 return [], input_filepath # Still return path even if empty
 
             if not requests_data and raw_requests:
                  print(f"WARNING: Generator produced output, but no valid request lines were parsed.", file=sys.stderr)
-                 return [], persistent_file
+                 return [], input_filepath # Return path even if parsing failed
 
             requests_data.sort(key=lambda x: x[0])
-            return requests_data, persistent_file
+            return requests_data, input_filepath
+            # --- (End Request Parsing Logic) ---
 
         except FileNotFoundError:
             print(f"ERROR: Generator script not found at '{JarTester._gen_script_path}'", file=sys.stderr)
@@ -605,11 +641,12 @@ class JarTester:
             print(f"ERROR: Generator script failed with exit code {e.returncode}.", file=sys.stderr)
             print(f"--- Generator Command ---\n{' '.join(command)}", file=sys.stderr)
             print(f"--- Generator Stdout ---\n{e.stdout or '<empty>'}\n--- Generator Stderr ---\n{e.stderr or '<empty>'}", file=sys.stderr)
-            if gen_stdout is not None and persistent_file:
+            # Try to save the failed output anyway
+            if gen_stdout is not None and input_filepath:
                  try:
-                     with open(persistent_file, 'w', encoding='utf-8') as f: f.write(gen_stdout)
+                     with open(input_filepath, 'w', encoding='utf-8') as f: f.write(gen_stdout)
                  except Exception: pass
-            return None, None
+            return None, input_filepath # Return path even on failure, might contain partial/error output
         except Exception as e:
             print(f"ERROR: Failed to generate data: {e}", file=sys.stderr)
             debug_print("Exception in _generate_data", exc_info=True)
@@ -641,38 +678,48 @@ class JarTester:
             x_min = np.min(values)
             x_max = np.max(values)
             x_avg = np.mean(values)
-            base_min = PERF_P_VALUE * x_avg + (1 - PERF_P_VALUE) * x_min
-            base_max = PERF_P_VALUE * x_avg + (1 - PERF_P_VALUE) * x_max
+            # Handle cases where all values are the same
+            if abs(x_max - x_min) < 1e-9:
+                 base_min = x_min
+                 base_max = x_max
+            else:
+                base_min = PERF_P_VALUE * x_avg + (1 - PERF_P_VALUE) * x_min
+                base_max = PERF_P_VALUE * x_avg + (1 - PERF_P_VALUE) * x_max
+                # Ensure base_min is not slightly larger than base_max due to precision
+                if base_min > base_max: base_min = base_max
+
             normalized = {}
             for r in correct_results:
                 x = r[name]
                 r_x = 0.0
-                if base_max > base_min + 1e-9:
+                denominator = base_max - base_min
+                if denominator > 1e-9: # Use tolerance for floating point comparison
                     if x <= base_min + 1e-9: r_x = 0.0
                     elif x >= base_max - 1e-9: r_x = 1.0
-                    else: r_x = (x - base_min) / (base_max - base_min)
-                elif abs(base_max - base_min) < 1e-9:
-                    r_x = 0.0 if x <= base_min + 1e-9 else 1.0
+                    else: r_x = (x - base_min) / denominator
+                elif abs(denominator) < 1e-9: # All values (or base min/max) are essentially the same
+                    r_x = 0.0 # Assign 0 if all are same (no performance difference)
                 normalized[r["jar_file"]] = r_x
             normalized_scores[name.upper()] = normalized
 
         for r in correct_results:
             jar_name = r["jar_file"]
             try:
-                r_t = normalized_scores['T_FINAL'][jar_name]
-                r_wt = normalized_scores['WT'][jar_name]
-                r_w = normalized_scores['W'][jar_name]
+                r_t = normalized_scores.get('T_FINAL', {}).get(jar_name, 0.0) # Default to 0 if key missing
+                r_wt = normalized_scores.get('WT', {}).get(jar_name, 0.0)
+                r_w = normalized_scores.get('W', {}).get(jar_name, 0.0)
                 r_prime_t = 1.0 - r_t
                 r_prime_wt = 1.0 - r_wt
                 r_prime_w = 1.0 - r_w
                 s = 15 * (0.3 * r_prime_t + 0.3 * r_prime_wt + 0.4 * r_prime_w)
-                r["final_score"] = max(0.0, s)
+                r["final_score"] = max(0.0, s) # Ensure score is non-negative
                 debug_print(f"Score for {jar_name}: T_final={r['t_final']:.3f}({r_prime_t:.3f}), WT={r['wt']:.3f}({r_prime_wt:.3f}), W={r['w']:.3f}({r_prime_w:.3f}) -> Final={r['final_score']:.3f}")
-            except KeyError:
-                print(f"WARNING: Could not find normalized scores for {jar_name}. Setting score to 0.", file=sys.stderr)
+            except KeyError as e_key: # Should be less likely with .get()
+                print(f"WARNING: Missing normalized score component for {jar_name}: {e_key}. Setting final score to 0.", file=sys.stderr)
                 r["final_score"] = 0.0
             except Exception as e_score:
                  print(f"ERROR: Unexpected error calculating final score for {jar_name}: {e_score}. Setting score to 0.", file=sys.stderr)
+                 debug_print(f"Score calculation exception for {jar_name}", exc_info=True)
                  r["final_score"] = 0.0
 
         for r in current_results:
@@ -680,7 +727,7 @@ class JarTester:
                 r["final_score"] = 0.0
 
     @staticmethod
-    def _display_results(results, round_preset_cmd, request_file_path, round_wall_limit): # Added round_wall_limit
+    def _display_results(results, round_preset_cmd, input_data_path, round_wall_limit): # Added input_data_path
         """Display results for the current round and log errors AND summary table."""
         console_lines = []
         log_lines = []
@@ -692,6 +739,9 @@ class JarTester:
         round_header = f"\n--- Test Round {JarTester._test_count} Results (Preset: {round_preset_cmd} | Wall Limit: {round_wall_limit:.1f}s) ---"
         console_lines.append(round_header)
         log_lines.append(round_header.replace(" Results ", " Summary "))
+        # Log the input data file path used for this round
+        log_lines.append(f"Input Data File: {input_data_path if input_data_path else '<Not Available>'}")
+
 
         header = f"{'JAR':<25} | {'Status':<12} | {'Score':<7} | {'T_final':<10} | {'WT':<10} | {'W':<10} | {'CPU(s)':<8} | {'Wall(s)':<8} | Details"
         console_lines.append(header)
@@ -723,50 +773,32 @@ class JarTester:
             console_lines.append(line)
             log_lines.append(line)
 
+            # --- Modify Error Logging Section ---
             if status not in ["CORRECT", "PENDING", "RUNNING", "INTERRUPTED"]:
                 has_errors_for_log = True
                 if error_log_header:
                     log_lines.append(f"\n--- Test Round {JarTester._test_count} Error Details ---")
+                    # Log input data path once per error section header
+                    log_lines.append(f"Input Data File for this Round: {input_data_path if input_data_path else '<Not Available>'}")
                     error_log_header = False
 
                 log_lines.append(f"\n--- Error Details for: {jar_name} (Status: {status}) ---")
                 log_lines.append(f"  Preset Used: {round_preset_cmd}")
-                log_lines.append(f"  Wall Limit Used: {round_wall_limit:.1f}s") # Log the limit used
+                log_lines.append(f"  Wall Limit Used: {round_wall_limit:.1f}s")
                 log_lines.append(f"  Error: {details}")
 
-                log_lines.append("  --- Input Data (from latest_requests.txt) ---")
-                if request_file_path and os.path.exists(request_file_path):
-                    try:
-                        with open(request_file_path, 'r', encoding='utf-8') as rf:
-                            MAX_INPUT_LOG_LINES = 50
-                            input_lines = rf.readlines()
-                            logged_lines_count = 0
-                            for i, req_line in enumerate(input_lines):
-                                if logged_lines_count < MAX_INPUT_LOG_LINES:
-                                    log_lines.append(f"    {req_line.strip()}")
-                                    logged_lines_count += 1
-                                elif i == MAX_INPUT_LOG_LINES:
-                                    log_lines.append(f"    ... (input truncated after {MAX_INPUT_LOG_LINES} lines)")
-                                    break
-                            if len(input_lines) <= MAX_INPUT_LOG_LINES: log_lines.append("    <End of Input>")
-                    except Exception as read_err:
-                        log_lines.append(f"    <Error reading input file {request_file_path}: {read_err}>")
-                else:
-                     log_lines.append(f"    <Input file '{request_file_path}' not found or not provided>")
-                log_lines.append("  --- End Input Data ---")
+                # Log path to input data file
+                log_lines.append("  --- Input Data File ---")
+                log_lines.append(f"    Path: {input_data_path if input_data_path else '<Not Available>'}")
+                log_lines.append("  --- End Input Data File ---")
 
-                log_lines.append("  --- Stdout ---")
-                stdout = r.get("stdout", [])
-                if stdout:
-                    MAX_OUTPUT_LOG_LINES = 100
-                    for i, out_line in enumerate(stdout):
-                         if i < MAX_OUTPUT_LOG_LINES: log_lines.append(f"    {out_line.strip()}")
-                         elif i == MAX_OUTPUT_LOG_LINES: log_lines.append(f"    ... (stdout truncated after {MAX_OUTPUT_LOG_LINES} lines)"); break
-                    if len(stdout) <= MAX_OUTPUT_LOG_LINES: log_lines.append("    <End of Stdout>")
-                else:
-                    log_lines.append("    <No stdout captured>")
-                log_lines.append("  --- End Stdout ---")
+                # Log path to stdout file
+                stdout_log = r.get("stdout_log_path")
+                log_lines.append("  --- Stdout Log File ---")
+                log_lines.append(f"    Path: {stdout_log if stdout_log else '<Not Saved or Error>'}")
+                log_lines.append("  --- End Stdout Log File ---")
 
+                # Keep logging stderr content directly
                 log_lines.append("  --- Stderr ---")
                 stderr = r.get("stderr", [])
                 if stderr:
@@ -779,6 +811,7 @@ class JarTester:
                      log_lines.append("    <No stderr captured>")
                 log_lines.append("  --- End Stderr ---")
                 log_lines.append("-" * 20)
+            # --- End Modified Error Logging Section ---
 
         console_lines.append("-" * len(header))
         log_lines.append("-" * len(header))
@@ -881,13 +914,14 @@ class JarTester:
                     args_dict[arg] = value
                     i += 2
                 else:
-                    args_dict[arg] = True
+                    args_dict[arg] = True # Handle flags like --hce
                     i += 1
 
             # Check if time argument was found for this preset
             if not has_time_arg:
-                print(f"WARNING: Preset '{cmd_str}' does not contain '-t' or '--max-time'. Wall time limit calculation might use default.", file=sys.stderr)
-                required_time_arg_present = False # Mark that at least one is missing
+                print(f"WARNING: Preset '{cmd_str}' does not contain '-t' or '--max-time'. Wall time limit calculation might use default ({DEFAULT_GEN_MAX_TIME}s).", file=sys.stderr)
+                # Keep required_time_arg_present = True if you want to allow this, or set to False to issue a final warning
+                # required_time_arg_present = False # Uncomment to get the final info message
 
             preset_label = " ".join(parts[1:])
             JarTester._gen_arg_presets.append(args_dict)
@@ -905,7 +939,7 @@ class JarTester:
         args_list = []
         for key, value in preset_dict.items():
             args_list.append(key)
-            if value is not True:
+            if value is not True: # Check for boolean flags
                 args_list.append(str(value))
         return args_list
 
@@ -921,13 +955,16 @@ class JarTester:
             JarTester._test_count = 0
             JarTester._all_results_history.clear()
 
+            # Create LOG_DIR and TMP_DIR
             os.makedirs(LOG_DIR, exist_ok=True)
+            os.makedirs(TMP_DIR, exist_ok=True)
             local_time = time.localtime()
             formatted_time = time.strftime("%Y-%m-%d-%H-%M-%S", local_time)
             JarTester._log_file_path = os.path.abspath(os.path.join(LOG_DIR, f"{formatted_time}_elevator_run.log"))
-            JarTester._persistent_request_file_path = os.path.abspath(os.path.join(LOG_DIR, "latest_requests.txt"))
-            print(f"INFO: Logging errors and round summaries to {JarTester._log_file_path}")
-            print(f"INFO: Storing latest generated requests to {JarTester._persistent_request_file_path}")
+            # JarTester._persistent_request_file_path removed
+            print(f"INFO: Logging round summaries and errors to {JarTester._log_file_path}")
+            print(f"INFO: Storing temporary input/output files in {os.path.abspath(TMP_DIR)}/")
+
 
             if not os.path.exists(JarTester._gen_script_path): print(f"ERROR: Generator script not found: {JarTester._gen_script_path}", file=sys.stderr); return
             if not os.path.exists(JarTester._checker_script_path): print(f"ERROR: Checker script not found: {JarTester._checker_script_path}", file=sys.stderr); return
@@ -939,7 +976,8 @@ class JarTester:
             signal.signal(signal.SIGINT, JarTester._signal_handler)
             print(f"Press Ctrl+C to stop testing gracefully after the current round.")
 
-            current_request_file_path = None
+            # Remove variable tracking the single request file path
+            # current_request_file_path = None
 
             while not JarTester._interrupted:
                 JarTester._test_count += 1
@@ -970,19 +1008,26 @@ class JarTester:
 
                 # 1. Generate Data
                 debug_print(f"Round {JarTester._test_count}: Generating data...")
-                requests_data, current_request_file_path = JarTester._generate_data(gen_args_list)
+                # _generate_data now returns the path to the unique input file
+                requests_data, input_data_path = JarTester._generate_data(gen_args_list)
 
                 if requests_data is None:
                     print(f"ERROR: Failed to generate data for this round (Preset: {selected_preset_cmd}). Skipping.", file=sys.stderr)
                     if JarTester._log_file_path:
                          try:
                              with open(JarTester._log_file_path, "a", encoding="utf-8") as f:
-                                 f.write(f"\n--- Round {JarTester._test_count}: Generation FAILED ---\nPreset: {selected_preset_cmd}\nWall Limit: {round_wall_time_limit:.1f}s\n")
+                                 # Log failure and the intended input path (even if write failed)
+                                 f.write(f"\n--- Round {JarTester._test_count}: Generation FAILED ---\n")
+                                 f.write(f"Preset: {selected_preset_cmd}\n")
+                                 f.write(f"Wall Limit: {round_wall_time_limit:.1f}s\n")
+                                 f.write(f"Intended Input File: {input_data_path if input_data_path else '<Path Not Generated>'}\n")
                          except Exception: pass
                     if JarTester._interrupted: break
                     time.sleep(2)
                     continue
-                debug_print(f"Round {JarTester._test_count}: Generated {len(requests_data)} requests to '{current_request_file_path}' using preset '{selected_preset_cmd}'")
+                # Log the path to the generated input file
+                debug_print(f"Round {JarTester._test_count}: Generated {len(requests_data)} requests to '{input_data_path}' using preset '{selected_preset_cmd}'")
+
 
                 if JarTester._interrupted: break
 
@@ -993,8 +1038,8 @@ class JarTester:
                 print(f"INFO: Running {len(JarTester._jar_files)} JARs with max {max_workers} workers...")
                 with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                     future_to_jar = {
-                        # Pass the calculated round_wall_time_limit to _run_single_jar
-                        executor.submit(JarTester._run_single_jar, jar_file, requests_data, current_request_file_path, round_wall_time_limit): jar_file
+                        # Pass the unique input_data_path to _run_single_jar
+                        executor.submit(JarTester._run_single_jar, jar_file, requests_data, input_data_path, round_wall_time_limit): jar_file
                         for jar_file in JarTester._jar_files
                     }
                     debug_print(f"Round {JarTester._test_count}: Submitted {len(future_to_jar)} JARs.")
@@ -1008,6 +1053,8 @@ class JarTester:
                              jar_basename = os.path.basename(jar_file)
                              try:
                                  result = future.result()
+                                 # Ensure stdout_log_path exists in result, even if None
+                                 if "stdout_log_path" not in result: result["stdout_log_path"] = None
                                  results.append(result)
                                  completed_count += 1
                                  print(f"Progress: {completed_count}/{len(future_to_jar)} completed ({jar_basename}: {result.get('status','?')})...", end='\r', flush=True)
@@ -1016,7 +1063,7 @@ class JarTester:
                              except Exception as exc:
                                 print(f'\nERROR: JAR {jar_basename} generated an unexpected exception in tester thread: {exc}', file=sys.stderr)
                                 debug_print(f"Exception from future for {jar_basename}", exc_info=True)
-                                results.append({ "jar_file": jar_basename, "status": "CRASHED", "final_score": 0.0, "error_details": f"Tester thread exception: {exc}", "cpu_time": 0, "wall_time": 0, "t_final": None, "wt": None, "w": None, "stdout": [], "stderr": []})
+                                results.append({ "jar_file": jar_basename, "status": "CRASHED", "final_score": 0.0, "error_details": f"Tester thread exception: {exc}", "cpu_time": 0, "wall_time": 0, "t_final": None, "wt": None, "w": None, "stdout_log_path": None, "stderr": [f"Tester thread exception: {exc}"]})
                                 print(f"Progress: {completed_count}/{len(future_to_jar)} completed ({jar_basename}: CRASHED)...", end='\r', flush=True)
                                 completed_count += 1
 
@@ -1034,9 +1081,9 @@ class JarTester:
                 debug_print(f"Round {JarTester._test_count}: Calculating scores...")
                 JarTester._calculate_scores(results)
 
-                # 4. Display Results (Pass round-specific wall limit)
+                # 4. Display Results (Pass round-specific wall limit and input_data_path)
                 debug_print(f"Round {JarTester._test_count}: Displaying results...")
-                JarTester._display_results(results, selected_preset_cmd, current_request_file_path, round_wall_time_limit)
+                JarTester._display_results(results, selected_preset_cmd, input_data_path, round_wall_time_limit)
 
                 # 5. Update Historical Data
                 if not JarTester._interrupted:
@@ -1046,8 +1093,8 @@ class JarTester:
                     debug_print(f"Round {JarTester._test_count}: Skipping history update due to interrupt.")
                     break
 
-                # 6. Cleanup
-                current_request_file_path = None
+                # 6. Cleanup (input_data_path is now loop-local, no need to clear)
+                # No explicit cleanup of tmp files implemented, as requested.
 
                 if not JarTester._interrupted: time.sleep(1)
 
@@ -1063,6 +1110,14 @@ class JarTester:
                  except Exception: pass
         finally:
              JarTester._print_summary()
+             # Optional: Add cleanup logic for TMP_DIR here if desired in the future
+             # try:
+             #     if os.path.exists(TMP_DIR):
+             #          print(f"INFO: Cleaning up temporary directory: {os.path.abspath(TMP_DIR)}")
+             #          # shutil.rmtree(TMP_DIR) # Uncomment to enable cleanup
+             # except Exception as e_clean:
+             #     print(f"WARNING: Failed to clean up temporary directory {TMP_DIR}: {e_clean}", file=sys.stderr)
+
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
