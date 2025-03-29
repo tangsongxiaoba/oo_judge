@@ -1003,6 +1003,12 @@ class JarTester:
                 selected_preset_dict = JarTester._gen_arg_presets[preset_index]
                 selected_preset_cmd = JarTester._raw_preset_commands[preset_index]
                 gen_args_list = JarTester._preset_dict_to_arg_list(selected_preset_dict)
+
+                current_seed = int(time.time() * 1000)
+                seed_arg_str = f"--seed {current_seed}"
+                gen_args_list.extend(["--seed", str(current_seed)])
+                selected_preset_cmd = f"{selected_preset_cmd} {seed_arg_str}"
+
                 print(f"Using Generator Preset: {selected_preset_cmd}")
                 debug_print(f"Round {JarTester._test_count}: Selected preset index {preset_index}, args: {gen_args_list}")
 
@@ -1132,12 +1138,12 @@ class JarTester:
                 except Exception as e_log_summary:
                     print(f"ERROR: Failed to write final summary to log file {JarTester._log_file_path}: {e_log_summary}", file=sys.stderr)
 
-            try:
-                if os.path.exists(TMP_DIR) and input("Input 'Confirm' to Delete TMP_DIR: ") == "Confirm":
-                    print(f"INFO: Cleaning up temporary directory: {os.path.abspath(TMP_DIR)}")
-                    shutil.rmtree(TMP_DIR)
-            except Exception as e_clean:
-                print(f"WARNING: Failed to clean up temporary directory {TMP_DIR}: {e_clean}", file=sys.stderr)
+            # try:
+            #     if os.path.exists(TMP_DIR) and input("Input 'Confirm' to Delete TMP_DIR: ") == "Confirm":
+            #         print(f"INFO: Cleaning up temporary directory: {os.path.abspath(TMP_DIR)}")
+            #         shutil.rmtree(TMP_DIR)
+            # except Exception as e_clean:
+            #     print(f"WARNING: Failed to clean up temporary directory {TMP_DIR}: {e_clean}", file=sys.stderr)
 
 
 # --- Main Execution Block ---
