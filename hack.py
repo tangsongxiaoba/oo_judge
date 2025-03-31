@@ -74,12 +74,13 @@ def choose_existed_one(stdins, stdouts):
     if not stdin in stdouts:
         print(f"ERROR: Can't find stdout paired with {stdin}")
         REJECTED.append(stdin)
-        shutil.rmtree(os.path.join(HACK_DIR, "stdin", stdin))    
+        os.remove(os.path.join(HACK_DIR, "stdin", stdin))    
     stdin_path = os.path.join(HACK_DIR, "stdin", stdin)
     stdout_path = os.path.join(HACK_DIR, "stdout", stdin)
-    checker_output = subprocess.run([PYTHON, CHECKER, stdin_path, stdout_path], capture_output=True).stdout.strip()
-    checker_output = decode_checker_out(checker_output)
-    if not checker_output["result"]:
+    checker_output = subprocess.run([PYTHON, CHECKER, stdin_path, stdout_path], capture_output=True, text=True).stdout.strip()
+    isPass = re.findall(r"Verdict: (.*?)", checker_output)[0] == "CORRECT"
+    # checker_output = decode_checker_out(checker_output)
+    if not isPass:
         print(f"ERROR: stdin {stdin} and stdout can't pass checker_test")
         REJECTED.append(stdin)
     stdin = open(stdin_path, "r", encoding="utf-8").read()
@@ -97,10 +98,11 @@ def generate_random_ones():
         stdin = gen.genData()
         with open(os.path.join(HACK_DIR, "stdin", f"stdin.txt"), "w", encoding="utf-8") as file:
             file.write(stdin)
-        print(USEDATAINPUT)
+        # print(USEDATAINPUT)
         stdout_path = os.path.join(HACK_DIR, "stdout", f"{formatted_time}_{i}.txt")
         with open(stdout_path, "w", encoding="utf-8") as stdout_file:
-            datainput_proc = subprocess.Popen([f"./{USEDATAINPUT}"], cwd=os.path.join(HACK_DIR, "stdin"), stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+            # print(os.path.join(HACK_DIR, "stdin"))
+            datainput_proc = subprocess.Popen([os.path.join(os.path.abspath(HACK_DIR), "stdin", f"{USEDATAINPUT}")], cwd=os.path.join(HACK_DIR, "stdin"), stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
             java_proc = subprocess.Popen(["java", "-jar", STD_JAR], stdin=datainput_proc.stdout, stdout=stdout_file)
             java_proc.wait()
             datainput_proc.wait()
