@@ -23,7 +23,7 @@ import traceback # For logging errors from threads
 CPU_TIME_LIMIT = 10.0  # seconds
 MIN_WALL_TIME_LIMIT = 120.0 # seconds - Renamed: Minimum wall time limit
 PERF_P_VALUE = 0.10
-ENABLE_DETAILED_DEBUG = False # Set to True for verbose debugging
+ENABLE_DETAILED_DEBUG = True # Set to True for verbose debugging
 LOG_DIR = "logs" # Define log directory constant
 TMP_DIR = "tmp"  # Define temporary file directory constant
 DEFAULT_GEN_MAX_TIME = 50.0 # Default generator -t value if not specified in preset
@@ -1419,9 +1419,10 @@ class JarTester:
             print(f"Press Ctrl+C to stop testing gracefully after running rounds finish.")
 
             print("\n" + "="*40)
-            input("Setup complete. Press Enter to begin testing...")
-            # JarTester._clear_screen() # Clear after Enter
-            print("="*40 + "\n")
+            if not ENABLE_DETAILED_DEBUG: 
+                input("Setup complete. Press Enter to begin testing...")
+                # JarTester._clear_screen() # Clear after Enter
+                print("="*40 + "\n")
 
             # --- Main Parallel Round Execution Loop ---
             active_futures = set()
