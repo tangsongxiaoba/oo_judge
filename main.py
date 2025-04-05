@@ -116,7 +116,7 @@ class JarProcessor:
             unit_module_name = f"unit_{unit_number}.test"
             try:
                 test_module = importlib.import_module(unit_module_name)
-                test_module.JarTester.test(f"unit_{unit_number}.hw_{hw_number}", "jar", 4)
+                test_module.JarTester.test(f"unit_{unit_number}.hw_{hw_number}", "jar", 1)
             except ImportError as e:
                 print(f"Error: Could not import test module for unit_{unit_number}: {e}")
                 print(f"Make sure unit_{unit_number}/test.py exists and is properly implemented.")
