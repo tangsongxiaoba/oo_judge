@@ -1,6 +1,8 @@
 # --- START OF FILE test.py ---
 
 # tester.py
+import ast
+import json
 import os
 import sys
 import subprocess
@@ -23,56 +25,322 @@ import traceback # For logging errors from threads
 CPU_TIME_LIMIT = 10.0  # seconds
 MIN_WALL_TIME_LIMIT = 120.0 # seconds - Renamed: Minimum wall time limit
 PERF_P_VALUE = 0.10
-ENABLE_DETAILED_DEBUG = True # Set to True for verbose debugging
+ENABLE_DETAILED_DEBUG = False # Set to True for verbose debugging
 LOG_DIR = "logs" # Define log directory constant
 TMP_DIR = "tmp"  # Define temporary file directory constant
 DEFAULT_GEN_MAX_TIME = 50.0 # Default generator -t value if not specified in preset
-DEFAULT_PARALLEL_ROUNDS = 2 # Default number of rounds to run in parallel
+DEFAULT_PARALLEL_ROUNDS = 16 # Default number of rounds to run in parallel
 
 # --- Generator Argument Presets ---
 # (Keep your GEN_PRESET_COMMANDS list as is)
+# GEN_PRESET_COMMANDS = [
+#     # === Baseline ===
+#     # "gen.py -n 25 -t 50.0",
+#     # === Load & Density ===
+#     "gen.py -n 70 -t 40.0 --min-interval 0.0 --max-interval 0.5 --hce",
+#     "gen.py -n 98 -t 70.0 --min-interval 0.1 --max-interval 0.8",
+#     "gen.py -n 8 -t 100.0 --min-interval 10.0 --max-interval 15.0",
+#     "gen.py -n 75 -t 150.0 --min-interval 0.5 --max-interval 2.5",
+#     # "gen.py -n 1 -t 10.0",
+#     "gen.py -n 2 -t 10.0 --min-interval 0.1 --max-interval 0.5",
+#     # "gen.py -n 1 -t 10.0 --hce",
+#     "gen.py -n 2 -t 10.0 --hce --min-interval 0.2 --max-interval 0.8",
+#     # === Timing & Bursts ===
+#     "gen.py -n 30 --start-time 1.0 --max-time 10.0 --force-start-requests 30", # Uses --max-time
+#     "gen.py -n 20 --start-time 1.0 --max-time 30.0 --force-end-requests 20", # Uses --max-time
+#     "gen.py -n 15 --start-time 5.0 --max-time 5.0",                             # Uses --max-time
+#     "gen.py -n 45 --start-time 10.0 --max-time 10.1 --burst-size 45 --burst-time 10.0", # Uses --max-time
+#     "gen.py -n 60 -t 50.0 --burst-size 30",
+#     "gen.py -n 90 -t 80.0 --start-time 2.0 --force-start-requests 25 --burst-size 30 --burst-time 41.0 --force-end-requests 25",
+#     "gen.py -n 65 -t 40.0 --hce --force-start-requests 20 --burst-size 25 --burst-time 8.0",
+#     "gen.py -n 40 -t 49.5 --hce --burst-size 20 --burst-time 48.0",
+#     "gen.py -n 20 -t 100.0 --min-interval 8.0 --max-interval 12.0 --burst-size 8 --burst-time 50.0",
+#     "gen.py -n 30 -t 30.0 --min-interval 0.5 --max-interval 0.5",
+#     # === Priority ===
+#     "gen.py -n 60 -t 30.0 --priority-bias extremes --priority-bias-ratio 0.9",
+#     "gen.py -n 55 -t 40.0 --priority-bias middle --priority-bias-ratio 0.9 --priority-middle-range 10",
+#     "gen.py -n 50 -t 40.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 2",
+#     "gen.py -n 15 -t 120.0 --min-interval 5.0 --max-interval 10.0 --priority-bias extremes --priority-bias-ratio 0.9",
+#     "gen.py -n 40 -t 30.0 --priority-bias extremes --priority-bias-ratio 1.0",
+#     # === Elevator Focus ===
+#     "gen.py -n 40 -t 30.0 --focus-elevator 1 --focus-ratio 1.0 --hce", # Added -t
+#     "gen.py -n 70 -t 48.0 --hce --focus-elevator 2 --focus-ratio 0.8",
+#     "gen.py -n 80 -t 60.0 --focus-elevator 4 --focus-ratio 0.9",
+#     "gen.py -n 40 -t 30.0 --focus-elevator 5 --focus-ratio 0.0",
+#     # === Floor Patterns ===
+#     "gen.py -n 50 -t 60.0 --extreme-floor-ratio 0.8",
+#     # === Complex Combinations ===
+#     "gen.py -n 65 -t 45.0 --start-time 1.0 --force-start-requests 5 --force-end-requests 5 --burst-size 15 --burst-time 20.0 --focus-elevator 3 --focus-ratio 0.5 --priority-bias extremes --priority-bias-ratio 0.3 --hce",
+#     "gen.py -n 60 -t 20.0 --hce --min-interval 0.0 --max-interval 0.2 --priority-bias extremes --priority-bias-ratio 0.4",
+#     "gen.py -n 55 -t 45.0 --hce --extreme-floor-ratio 0.6 --priority-bias middle --priority-bias-ratio 0.7 --priority-middle-range 15",
+#     "gen.py -n 50 -t 45.0 --hce --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.6",
+#     "gen.py -n 60 -t 70.0 --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.7",
+# ]
 GEN_PRESET_COMMANDS = [
-    # === Baseline ===
-    # "gen.py -n 25 -t 50.0",
-    # === Load & Density ===
-    "gen.py -n 70 -t 40.0 --min-interval 0.0 --max-interval 0.5 --hce",
-    "gen.py -n 98 -t 70.0 --min-interval 0.1 --max-interval 0.8",
-    "gen.py -n 8 -t 100.0 --min-interval 10.0 --max-interval 15.0",
-    "gen.py -n 75 -t 150.0 --min-interval 0.5 --max-interval 2.5",
-    # "gen.py -n 1 -t 10.0",
-    "gen.py -n 2 -t 10.0 --min-interval 0.1 --max-interval 0.5",
-    # "gen.py -n 1 -t 10.0 --hce",
-    "gen.py -n 2 -t 10.0 --hce --min-interval 0.2 --max-interval 0.8",
-    # === Timing & Bursts ===
-    "gen.py -n 30 --start-time 1.0 --max-time 10.0 --force-start-requests 30", # Uses --max-time
-    "gen.py -n 20 --start-time 1.0 --max-time 30.0 --force-end-requests 20", # Uses --max-time
-    "gen.py -n 15 --start-time 5.0 --max-time 5.0",                             # Uses --max-time
-    "gen.py -n 45 --start-time 10.0 --max-time 10.1 --burst-size 45 --burst-time 10.0", # Uses --max-time
-    "gen.py -n 60 -t 50.0 --burst-size 30",
-    "gen.py -n 90 -t 80.0 --start-time 2.0 --force-start-requests 25 --burst-size 30 --burst-time 41.0 --force-end-requests 25",
-    "gen.py -n 65 -t 40.0 --hce --force-start-requests 20 --burst-size 25 --burst-time 8.0",
-    "gen.py -n 40 -t 49.5 --hce --burst-size 20 --burst-time 48.0",
-    "gen.py -n 20 -t 100.0 --min-interval 8.0 --max-interval 12.0 --burst-size 8 --burst-time 50.0",
-    "gen.py -n 30 -t 30.0 --min-interval 0.5 --max-interval 0.5",
-    # === Priority ===
-    "gen.py -n 60 -t 30.0 --priority-bias extremes --priority-bias-ratio 0.9",
-    "gen.py -n 55 -t 40.0 --priority-bias middle --priority-bias-ratio 0.9 --priority-middle-range 10",
-    "gen.py -n 50 -t 40.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 2",
-    "gen.py -n 15 -t 120.0 --min-interval 5.0 --max-interval 10.0 --priority-bias extremes --priority-bias-ratio 0.9",
-    "gen.py -n 40 -t 30.0 --priority-bias extremes --priority-bias-ratio 1.0",
-    # === Elevator Focus ===
-    "gen.py -n 40 -t 30.0 --focus-elevator 1 --focus-ratio 1.0 --hce", # Added -t
-    "gen.py -n 70 -t 48.0 --hce --focus-elevator 2 --focus-ratio 0.8",
-    "gen.py -n 80 -t 60.0 --focus-elevator 4 --focus-ratio 0.9",
-    "gen.py -n 40 -t 30.0 --focus-elevator 5 --focus-ratio 0.0",
-    # === Floor Patterns ===
-    "gen.py -n 50 -t 60.0 --extreme-floor-ratio 0.8",
-    # === Complex Combinations ===
-    "gen.py -n 65 -t 45.0 --start-time 1.0 --force-start-requests 5 --force-end-requests 5 --burst-size 15 --burst-time 20.0 --focus-elevator 3 --focus-ratio 0.5 --priority-bias extremes --priority-bias-ratio 0.3 --hce",
-    "gen.py -n 60 -t 20.0 --hce --min-interval 0.0 --max-interval 0.2 --priority-bias extremes --priority-bias-ratio 0.4",
-    "gen.py -n 55 -t 45.0 --hce --extreme-floor-ratio 0.6 --priority-bias middle --priority-bias-ratio 0.7 --priority-middle-range 15",
-    "gen.py -n 50 -t 45.0 --hce --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.6",
-    "gen.py -n 60 -t 70.0 --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.7",
+    # === Baseline (Mix Passengers & SCHE) ===
+    # OK: Moderate P/S, intervals likely okay. Assumes gen.py default interval isn't pathologically small.
+    "gen.py -np 20 -ns 5 -t 50.0",
+
+    # === Load & Density (Passengers Dominant) ===
+    # OK (--hce): HuCe constraints met. SCHE on different elevators.
+    "gen.py -np 65 -ns 5 -t 40.0 --min-interval 0.0 --max-interval 0.5 --hce", # Total 70
+    # RISKY (non-hce): -ns 5 with potentially small intervals. Increased min-interval slightly. Requires gen.py fix ideally.
+    "gen.py -np 90 -ns 5 -t 70.0 --min-interval 0.5 --max-interval 1.5",
+    # OK: Sparse requests, low chance of SCHE collision even without --hce.
+    "gen.py -np 6 -ns 2 -t 100.0 --min-interval 10.0 --max-interval 15.0",
+    # OK: Moderate density, -ns 5 over long time. Should be okay.
+    "gen.py -np 70 -ns 5 -t 150.0 --min-interval 0.5 --max-interval 2.5",
+    # OK: Very few P requests.
+    "gen.py -np 2 -ns 0 -t 10.0 --min-interval 0.1 --max-interval 0.5",
+    # OK (--hce): HuCe constraints met.
+    # === Timing & Passenger Bursts ===
+    # RISKY (non-hce): -ns 2 but all requests in <10s. Low chance but possible SCHE collision.
+    "gen.py -np 30 -ns 2 -t 10.0 --start-time 1.0 --force-start-passengers 30",
+    # RISKY (non-hce): -ns 1, OK.
+    "gen.py -np 20 -ns 1 -t 30.0 --start-time 1.0 --force-end-passengers 20",
+    # RISKY (non-hce): -ns 1, OK.
+    "gen.py -np 15 -ns 1 -t 5.0 --start-time 5.0 --max-time 5.0",
+    # RISKY (non-hce): -ns 3 concentrated in ~0.1s. Higher chance of SCHE collision. Needs gen.py fix ideally.
+    "gen.py -np 45 -ns 3 -t 10.1 --start-time 10.0 --burst-size 45 --burst-time 10.0",
+    # RISKY (non-hce): -ns 5 spread over 50s. Moderate risk.
+    "gen.py -np 55 -ns 5 -t 50.0 --burst-size 30",
+    # FIXED (non-hce): Increased min-interval significantly for -ns 10. Still assumes gen.py doesn't pathologically cluster.
+    "gen.py -np 80 -ns 10 -t 80.0 --min-interval 2.0 --max-interval 5.0 --start-time 2.0 --force-start-passengers 25 --burst-size 30 --burst-time 41.0 --force-end-passengers 25", # Note: -ns 10 needs care!
+    # OK (--hce): HuCe constraints met. Max time adjusted.
+    "gen.py -np 60 -ns 5 -t 40.0 --max-time 40.0 --hce --force-start-passengers 20 --burst-size 25 --burst-time 8.0", # Total 65
+    # OK (--hce): HuCe constraints met. Max time adjusted.
+    "gen.py -np 35 -ns 5 -t 49.5 --max-time 49.5 --hce --burst-size 20 --burst-time 48.0", # Total 40
+    # OK (non-hce): Sparse P, -ns 5 over 100s. Low risk.
+    "gen.py -np 15 -ns 5 -t 100.0 --min-interval 8.0 --max-interval 12.0 --burst-size 8 --burst-time 50.0",
+    # RISKY (non-hce): -ns 2 with fixed 0.5s interval. Possible SCHE collision.
+    "gen.py -np 28 -ns 2 -t 30.0 --min-interval 0.5 --max-interval 0.5",
+
+    # === Passenger Priority Focus ===
+    # RISKY (non-hce): -ns 5 over 30s. Moderate risk.
+    "gen.py -np 55 -ns 5 -t 30.0 --priority-bias extremes --priority-bias-ratio 0.9",
+    # RISKY (non-hce): -ns 5 over 40s. Moderate risk.
+    "gen.py -np 50 -ns 5 -t 40.0 --priority-bias middle --priority-bias-ratio 0.9 --priority-middle-range 10",
+    # RISKY (non-hce): -ns 2 over 40s. Lower risk.
+    "gen.py -np 48 -ns 2 -t 40.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 2",
+    # OK (non-hce): Sparse P, -ns 5 over 120s. Low risk.
+    "gen.py -np 10 -ns 5 -t 120.0 --min-interval 5.0 --max-interval 10.0 --priority-bias extremes --priority-bias-ratio 0.9",
+    # RISKY (non-hce): -ns 5 over 30s. Moderate risk.
+    "gen.py -np 35 -ns 5 -t 30.0 --priority-bias extremes --priority-bias-ratio 1.0",
+
+    # === Passenger Floor Patterns ===
+    # RISKY (non-hce): -ns 5 over 60s. Moderate risk.
+    "gen.py -np 45 -ns 5 -t 60.0 --extreme-floor-ratio 0.8",
+
+    # === SCHE Focused Tests ===
+    # --- SCHE Distribution & Timing ---
+    # OK (--hce): SCHE ONLY, spread out on different elevators. HuCe time limit ok.
+    "gen.py -np 1 -ns 6 -t 50.0 --max-time 50.0 --min-interval 7.0 --max-interval 9.0 --hce",
+    # OK (--hce): P + SCHE clustered early. HuCe rules ok.
+    "gen.py -np 10 -ns 6 -t 20.0 --max-time 20.0 --min-interval 0.1 --max-interval 1.5 --hce",
+    # RISKY (non-hce): -ns 5 late, concentrated in 10s. Moderate risk.
+    "gen.py -np 10 -ns 5 -t 50.0 --start-time 40.0",
+    # --- SCHE interacting with Passenger Loads ---
+    # OK (--hce): SCHE spread out (diff elevators), passenger burst later. HuCe time ok.
+    "gen.py -np 30 -ns 5 -t 50.0 --max-time 50.0 --burst-size 20 --burst-time 35.0 --hce", # Total 35
+    # OK (--hce): High passenger density + Max SCHE (diff elevators). HuCe time ok.
+    "gen.py -np 60 -ns 6 -t 45.0 --max-time 45.0 --min-interval 0.1 --max-interval 0.8 --hce", # Total 66
+    # OK (--hce): Extreme priority P + Max SCHE (diff elevators). HuCe time ok.
+    "gen.py -np 50 -ns 6 -t 40.0 --max-time 40.0 --priority-bias extremes --priority-bias-ratio 0.7 --hce", # Total 56
+    # OK (--hce): Extreme floor P + Max SCHE (diff elevators). HuCe time ok.
+    "gen.py -np 40 -ns 6 -t 60.0 --max-time 50.0 --extreme-floor-ratio 0.6 --hce", # Total 46, enforced max_time 50 for HuCe
+    # OK (--hce): Early passenger burst + Max SCHE (diff elevators). HuCe time ok.
+    "gen.py -np 20 -ns 6 -t 70.0 --max-time 50.0 --start-time 10.0 --burst-size 15 --burst-time 15.0 --hce", # Total 26, enforced max_time 50 for HuCe
+
+    # === Complex Combinations (Revisited for HW6) ===
+    # OK (--hce): Mix forces/burst/prio + SCHE (diff elevators). HuCe time ok.
+    "gen.py -np 60 -ns 5 -t 45.0 --max-time 45.0 --start-time 1.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 15 --burst-time 20.0 --priority-bias extremes --priority-bias-ratio 0.3 --hce", # Total 65
+    # OK (--hce): Very high density P/S, HuCe limit. SCHE on diff elevators. HuCe time ok.
+    "gen.py -np 64 -ns 6 -t 20.0 --max-time 20.0 --hce --min-interval 0.0 --max-interval 0.2 --priority-bias extremes --priority-bias-ratio 0.4", # Total 70
+    # OK (--hce): Extreme floor + middle prio P + SCHE (diff elevators). HuCe time ok.
+    "gen.py -np 50 -ns 5 -t 45.0 --max-time 45.0 --hce --extreme-floor-ratio 0.6 --priority-bias middle --priority-bias-ratio 0.7 --priority-middle-range 15", # Total 55
+    # OK (--hce): Extreme floor/prio P + SCHE (diff elevators). HuCe time ok.
+    "gen.py -np 45 -ns 5 -t 45.0 --max-time 45.0 --hce --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.6", # Total 50
+    # FIXED (non-hce): Replaced -ns 10 with -ns 6 and increased interval. Reduced risk.
+    "gen.py -np 50 -ns 6 -t 70.0 --min-interval 1.0 --max-interval 4.0 --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.7",
+
+    "gen.py -np 20 -ns 5 -t 50.0",
+
+    # === Load & Density (Passengers Dominant) ===
+    # ID: HCE_MAX_LOAD
+    # OK (--hce): Maximize passengers under HuCe limit with a few SCHE. High density.
+    "gen.py -np 67 -ns 3 -t 40.0 --min-interval 0.0 --max-interval 0.3 --hce", # Total 70
+    # ID: PUB_HIGH_LOAD
+    # OK (non-hce): High passenger load, moderate SCHE spread out.
+    "gen.py -np 90 -ns 8 -t 80.0 --min-interval 0.5 --max-interval 1.0",
+    # ID: PUB_SPARSE_LONG
+    # OK (non-hce): Moderate P/S over very long duration.
+    "gen.py -np 30 -ns 10 -t 200.0 --min-interval 3.0 --max-interval 8.0",
+
+    # === Timing & Passenger Bursts ===
+    # ID: HCE_FORCE_START_MAX_SCHE
+    # OK (--hce): All passengers forced at start, max allowed SCHE spread later.
+    "gen.py -np 40 -ns 6 -t 50.0 --start-time 1.0 --force-start-passengers 40 --min-interval 6.0 --max-interval 8.0 --hce", # Total 46
+    # ID: HCE_FORCE_END_SCHE
+    # OK (--hce): All passengers forced at end, SCHE requests earlier.
+    "gen.py -np 30 -ns 5 -t 50.0 --start-time 1.0 --force-end-passengers 30 --max-time 49.9 --hce", # Total 35
+    # ID: PUB_BURST_EARLY_HIGH_SCHE
+    # OK (non-hce): Early passenger burst, high number of SCHE spread after.
+    "gen.py -np 30 -ns 18 -t 100.0 --start-time 5.0 --burst-size 30 --burst-time 5.1 --min-interval 4.0 --max-interval 6.0",
+    # ID: PUB_BURST_MID_HIGH_SCHE
+    # OK (non-hce): Mid-simulation burst during potential SCHE period (tests interaction). High SCHE count.
+    "gen.py -np 40 -ns 15 -t 80.0 --burst-size 35 --burst-time 40.0 --min-interval 1.0 --max-interval 5.0",
+    # ID: HCE_BURST_LATE
+    # OK (--hce): SCHE spread early, passenger burst very late within HuCe limits.
+    "gen.py -np 20 -ns 6 -t 50.0 --start-time 1.0 --burst-size 15 --burst-time 48.0 --hce", # Total 26
+    # ID: PUB_MULTI_BURST_SCHE
+    # OK (non-hce): Multiple passenger events (force start, burst, force end) interspersed with SCHE. Uses moderate SCHE count.
+    "gen.py -np 60 -ns 8 -t 90.0 --force-start-passengers 10 --burst-size 20 --burst-time 45.0 --force-end-passengers 10 --min-interval 1.0 --max-interval 6.0", # P=10+20+10 + 20 middle
+
+    # === Passenger Priority Focus ===
+    # ID: HCE_PRIO_EXTREME_MAX_SCHE
+    # OK (--hce): High extreme priority passenger load + Max allowed SCHE.
+    "gen.py -np 54 -ns 6 -t 40.0 --priority-bias extremes --priority-bias-ratio 0.9 --hce", # Total 60
+    # ID: PUB_PRIO_MIDDLE_HIGH_SCHE
+    # OK (non-hce): High middle priority passenger load + High SCHE count.
+    "gen.py -np 50 -ns 16 -t 100.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 10 --min-interval 1.0 --max-interval 5.0",
+
+    # === Passenger Floor Patterns ===
+    # ID: HCE_FLOOR_EXTREME_MAX_SCHE
+    # OK (--hce): High extreme floor passenger load + Max allowed SCHE.
+    "gen.py -np 44 -ns 6 -t 48.0 --extreme-floor-ratio 0.8 --hce", # Total 50
+    # ID: PUB_FLOOR_EXTREME_HIGH_SCHE
+    # OK (non-hce): High extreme floor passenger load + High SCHE count.
+    "gen.py -np 40 -ns 17 -t 120.0 --extreme-floor-ratio 0.7 --min-interval 2.0 --max-interval 6.0",
+
+    # === SCHE Focused Tests ===
+    # ID: HCE_SCHE_ONLY_MAX
+    # OK (--hce): SCHE ONLY, max allowed (6), spread within HuCe time.
+    "gen.py -np 1 -ns 6 -t 50.0 --start-time 1.0 --min-interval 7.0 --max-interval 8.0 --hce",
+    # ID: HCE_SCHE_ONLY_CLUSTERED
+    # OK (--hce): SCHE ONLY, max allowed (6), forced into shorter time span (intervals enforced by gen.py).
+    "gen.py -np 1 -ns 6 -t 40.0 --start-time 1.0 --max-time 40.0 --min-interval 0.1 --max-interval 1.0 --hce",
+    # ID: PUB_SCHE_ONLY_MAX
+    # OK (non-hce): SCHE ONLY, max public count (20), requires long duration for 6s interval.
+    "gen.py -np 1 -ns 20 -t 150.0 --start-time 1.0 --min-interval 6.0 --max-interval 7.0",
+    # ID: PUB_SCHE_ONLY_MAX_PRESSURE
+    # OK (non-hce): SCHE ONLY, max public count (20), shorter duration tests generator's time advancement.
+    "gen.py -np 1 -ns 20 -t 100.0 --start-time 1.0 --min-interval 0.5 --max-interval 3.0", # Generator will push times > 6s apart
+
+    # === Pressure Tests (Bursts during SCHE periods) ===
+    # ID: HCE_PRESSURE_BURST_MID_SCHE
+    # OK (--hce): Max SCHE spread, large passenger burst occurs mid-way.
+    "gen.py -np 40 -ns 6 -t 50.0 --start-time 1.0 --burst-size 35 --burst-time 25.0 --hce", # Total 46
+    # ID: PUB_PRESSURE_BURST_HIGH_SCHE
+    # OK (non-hce): High SCHE count spread, large passenger burst mid-way.
+    "gen.py -np 50 -ns 15 -t 100.0 --start-time 1.0 --min-interval 1.0 --max-interval 5.0 --burst-size 40 --burst-time 50.0",
+    # ID: HCE_PRESSURE_DENSE_P_MAX_SCHE
+    # OK (--hce): High density passengers throughout + Max SCHE requests.
+    "gen.py -np 64 -ns 6 -t 30.0 --max-time 30.0 --min-interval 0.0 --max-interval 0.3 --hce", # Total 70
+    # ID: PUB_PRESSURE_DENSE_P_HIGH_SCHE
+    # OK (non-hce): High density passengers throughout + High SCHE count.
+    "gen.py -np 70 -ns 18 -t 90.0 --min-interval 0.1 --max-interval 0.8",
+    # === Edge Combinations ===
+    # ID: HCE_EXTREME_ALL
+    # OK (--hce): Combines Prio/Floor extremes, burst, forced, max SCHE under HuCe limits.
+    "gen.py -np 50 -ns 6 -t 50.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 10 --burst-time 25.0 --priority-bias extremes --priority-bias-ratio 0.5 --extreme-floor-ratio 0.5 --hce", # Total 56
+    # ID: PUB_EXTREME_ALL_HIGH_SCHE
+    # OK (non-hce): Combines Prio/Floor extremes, burst, forced, high SCHE count.
+    "gen.py -np 40 -ns 19 -t 140.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 10 --burst-time 70.0 --priority-bias middle --priority-bias-ratio 0.4 --priority-middle-range 5 --extreme-floor-ratio 0.6 --min-interval 1.0 --max-interval 5.0", # P=5+5+10+20=40
+
+    "gen.py -np 30 -ns 5 -t 45.0 --min-interval 0.5 --max-interval 1.5 --hce",
+    # ID: PUB_BASELINE_MIX
+    # OK (non-hce): A standard public mix, moderate P/S, reasonable time.
+    "gen.py -np 40 -ns 8 -t 60.0 --min-interval 0.5 --max-interval 2.0",
+
+    # === High Load & Density (Focus: Many requests quickly) ===
+    # ID: HCE_MAX_LOAD_DENSE
+    # OK (--hce): Maximize total requests (70) under HuCe limit with high density. Tests handling near-limit scenarios.
+    "gen.py -np 64 -ns 6 -t 35.0 --min-interval 0.0 --max-interval 0.3 --hce",
+    # ID: PUB_HIGH_LOAD_DENSE
+    # OK (non-hce): High passenger load, moderate SCHE, high density over moderate time.
+    "gen.py -np 85 -ns 10 -t 70.0 --min-interval 0.1 --max-interval 0.8",
+    # ID: PUB_HIGH_SCHE_DENSE
+    # OK (non-hce): Moderate passenger load but high SCHE count with high density. Tests SCHE interval logic under pressure.
+    "gen.py -np 30 -ns 18 -t 80.0 --min-interval 0.2 --max-interval 1.0",
+
+    # === Timing & Bursts (Focus: Sudden load changes) ===
+    # ID: HCE_FORCE_START_MAX_SCHE
+    # OK (--hce): All passengers at start, max allowed SCHE spread later. Tests initial load handling + SCHE scheduling.
+    "gen.py -np 40 -ns 6 -t 40.0 --start-time 1.0 --force-start-passengers 40 --min-interval 5.0 --max-interval 7.0 --hce",
+    # ID: HCE_FORCE_END_MID_SCHE
+    # OK (--hce): SCHE requests distributed, all passengers appear exactly at the end time. Tests SCHE during operation and sudden late load.
+    "gen.py -np 30 -ns 5 -t 49.9 --start-time 1.0 --force-end-passengers 30 --max-time 49.9 --hce",
+    # ID: PUB_BURST_EARLY_HIGH_SCHE
+    # OK (non-hce): Early passenger burst, high number of SCHE spread afterwards.
+    "gen.py -np 40 -ns 18 -t 90.0 --start-time 5.0 --burst-size 40 --burst-time 5.1 --min-interval 3.0 --max-interval 5.0",
+    # ID: HCE_BURST_MID_MAX_SCHE
+    # OK (--hce): Max SCHE spread out, passenger burst occurs mid-way through their potential activity. Tests dynamic load changes.
+    "gen.py -np 34 -ns 6 -t 50.0 --start-time 1.0 --burst-size 30 --burst-time 25.0 --hce", # Total 40
+    # ID: PUB_MULTI_EVENT_HIGH_SCHE
+    # OK (non-hce): Multiple passenger events (force start, burst, force end) interspersed with many SCHE requests. Complex timeline.
+    "gen.py -np 60 -ns 15 -t 90.0 --force-start-passengers 10 --burst-size 25 --burst-time 45.0 --force-end-passengers 10 --min-interval 0.5 --max-interval 4.0", # P=10+25+10 + 15 middle
+
+    # === Passenger Priority Focus (Focus: Scheduling algorithm stress) ===
+    # ID: HCE_PRIO_EXTREME_MAX_SCHE
+    # OK (--hce): High load of extreme priority passengers + Max allowed SCHE. Tests priority handling under load.
+    "gen.py -np 54 -ns 6 -t 40.0 --priority-bias extremes --priority-bias-ratio 0.9 --hce",
+    # ID: PUB_PRIO_MIDDLE_HIGH_SCHE
+    # OK (non-hce): High load of middle priority passengers + High SCHE count. Different priority stress.
+    "gen.py -np 50 -ns 16 -t 80.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 10 --min-interval 0.5 --max-interval 4.0",
+    # ID: HCE_PRIO_MIX_DENSE
+    # OK (--hce): Mix of priority biases (extremes/middle/none) under dense conditions near HuCe limit.
+    "gen.py -np 60 -ns 5 -t 30.0 --priority-bias extremes --priority-bias-ratio 0.4 --priority-bias middle --priority-middle-range 15 --min-interval 0.1 --max-interval 0.5 --hce", # Note: only one bias can apply per passenger
+
+    # === Passenger Floor Patterns (Focus: Traffic flow patterns) ===
+    # ID: HCE_FLOOR_EXTREME_MAX_SCHE
+    # OK (--hce): High load of extreme floor (B4<->F7) passengers + Max allowed SCHE. Tests long-distance travel patterns.
+    "gen.py -np 44 -ns 6 -t 48.0 --extreme-floor-ratio 0.8 --hce",
+    # ID: PUB_FLOOR_EXTREME_HIGH_SCHE
+    # OK (non-hce): High load of extreme floor passengers + High SCHE count. Stressing long routes with SCHE interference.
+    "gen.py -np 40 -ns 17 -t 90.0 --extreme-floor-ratio 0.7 --min-interval 1.0 --max-interval 5.0",
+
+    # === SCHE Focused Tests (Focus: SCHE constraints and interaction) ===
+    # ID: HCE_SCHE_ONLY_MAX_CLUSTERED
+    # OK (--hce): SCHE ONLY, max allowed (6), forced into shorter time span. Tests generator's interval enforcement and elevator SCHE handling.
+    "gen.py -np 1 -ns 6 -t 40.0 --start-time 1.0 --max-time 40.0 --min-interval 0.1 --max-interval 1.0 --hce",
+    # ID: PUB_SCHE_ONLY_MAX_PRESSURE
+    # OK (non-hce): SCHE ONLY, max public count (20), relatively short duration forces generator's time advancement logic. Tests SCHE 6s rule implementation.
+    "gen.py -np 1 -ns 20 -t 90.0 --start-time 1.0 --min-interval 0.5 --max-interval 2.0", # Generator WILL push times > 6s apart
+    # === Pressure Tests (Focus: High contention, bursts during SCHE) ===
+    # ID: HCE_PRESSURE_BURST_DURING_SCHE
+    # OK (--hce): Max SCHE spread across the time, large passenger burst occurs right in the middle. High potential for interaction.
+    "gen.py -np 40 -ns 6 -t 50.0 --start-time 1.0 --burst-size 35 --burst-time 25.0 --hce",
+    # ID: PUB_PRESSURE_BURST_DURING_HIGH_SCHE
+    # OK (non-hce): High SCHE count spread out, large passenger burst occurs mid-way. Similar to HCE version but with more SCHE.
+    "gen.py -np 50 -ns 18 -t 80.0 --start-time 1.0 --min-interval 0.5 --max-interval 4.0 --burst-size 40 --burst-time 40.0",
+    # ID: HCE_PRESSURE_DENSE_P_MAX_SCHE
+    # OK (--hce): High density passengers throughout + Max SCHE requests, short timeframe. Maximum HuCe pressure.
+    "gen.py -np 64 -ns 6 -t 30.0 --max-time 30.0 --min-interval 0.0 --max-interval 0.3 --hce",
+    # ID: PUB_PRESSURE_DENSE_P_HIGH_SCHE
+    # OK (non-hce): High density passengers throughout + High SCHE count, moderate timeframe. Sustained pressure.
+    "gen.py -np 70 -ns 18 -t 70.0 --min-interval 0.1 --max-interval 0.6",
+
+    # === Balanced Tests (Focus: Mix of features without extremes) ===
+    # ID: HCE_BALANCED_MIX
+    # OK (--hce): Moderate P/S, mix of priority bias and a burst, reasonable density. Represents a typical complex scenario.
+    "gen.py -np 40 -ns 4 -t 60.0 --min-interval 0.5 --max-interval 2.0 --priority-bias middle --priority-bias-ratio 0.4 --burst-size 10 --burst-time 30.0 --hce",
+    # ID: PUB_BALANCED_MIX
+    # OK (non-hce): Moderate P/S, mix of floor pattern, priority bias, and burst. Public test equivalent of complex scenario.
+    "gen.py -np 50 -ns 8 -t 80.0 --min-interval 0.8 --max-interval 3.0 --extreme-floor-ratio 0.3 --priority-bias extremes --priority-bias-ratio 0.2 --burst-size 15 --burst-time 40.0",
+
+    # === Extreme Conditions (Focus: Pushing specific parameters to limits) ===
+    # ID: HCE_EXTREME_PRIO_FLOOR_MAX_SCHE
+    # OK (--hce): High P load, forcing *all* applicable passengers to extreme priority AND extreme floors, with max SCHE. Tests handling of combined extremes.
+    "gen.py -np 54 -ns 6 -t 45.0 --extreme-floor-ratio 1.0 --priority-bias extremes --priority-bias-ratio 1.0 --hce",
+    # ID: PUB_EXTREME_PRIO_FLOOR_HIGH_SCHE
+    # OK (non-hce): High P load, all extreme priority/floors, high SCHE count. Public test version of combined extremes.
+    "gen.py -np 50 -ns 15 -t 90.0 --extreme-floor-ratio 1.0 --priority-bias extremes --priority-bias-ratio 1.0 --min-interval 0.5 --max-interval 3.0",
+    # ID: HCE_EXTREME_TIME_CRUNCH_P_MAX_SCHE
+    # OK (--hce): Moderate passenger count forced into a *tiny* time window (effectively simultaneous) + max SCHE spread around it. Tests dispatcher's ability to handle sudden bulk requests.
+    "gen.py -np 30 -ns 6 -t 40.0 --start-time 15.0 --max-time 15.1 --force-start-passengers 30 --hce", # SCHE will be forced outside 15.0-15.1 due to intervals
+    # ID: PUB_EXTREME_TIME_CRUNCH_P_HIGH_SCHE
+    # OK (non-hce): High passenger count forced into tiny window + high SCHE count. Public test version of time crunch.
+    "gen.py -np 70 -ns 18 -t 80.0 --start-time 40.0 --max-time 40.2 --force-start-passengers 70", # SCHE will be forced outside 40.0-40.2
 ]
 
 
@@ -600,46 +868,89 @@ class JarTester:
                     if details_stdout: checker_details += f" stdout: {details_stdout[:200]}"
                     if details_stderr: checker_details += f" stderr: {details_stderr[:200]}"
                     debug_print(f"Checker error for {jar_basename}: Exit code {checker_proc.returncode}")
-                elif "Verdict: CORRECT" in checker_proc.stdout:
+                
+                # Get the raw output, decode if necessary
+                checker_output = checker_proc.stdout
+                try:
+                    # 如果是 bytes，先解码
+                    if isinstance(checker_output, bytes):
+                        checker_output = checker_output.decode('utf-8')
+                    # 使用 ast.literal_eval 解析（兼容单引号）
+                    checker_data = ast.literal_eval(checker_output)
+                    
+                    # 或者用 json.loads（需要确保是标准 JSON）
+                    # checker_data = json.loads(checker_output.replace("'", '"'))
+                except (ValueError, SyntaxError) as e:
+                    print(f"解析失败！原始数据: {checker_output}")
+                    raise
+
+                # Check the result field from the parsed JSON
+                if checker_data.get("result") == "Success":
                     checker_status = "CORRECT"
                     debug_print(f"Checker result for {jar_basename}: CORRECT")
                     try:
-                        t_final_match = re.search(r"\s*T_final.*?:\s*(\d+\.?\d*)", checker_proc.stdout)
-                        wt_match = re.search(r"\s*WT.*?:\s*(\d+\.?\d*)", checker_proc.stdout)
-                        w_match = re.search(r"^\s*W\s+\(Power Consumption\):\s*(\d+\.?\d*)", checker_proc.stdout, re.MULTILINE)
-                        # Check if matches were found before accessing group(1)
-                        t_final_val = float(t_final_match.group(1)) if t_final_match else None
-                        wt_val = float(wt_match.group(1)) if wt_match else None
-                        w_val = float(w_match.group(1)) if w_match else None
+                        # Access performance metrics directly from the parsed dictionary
+                        performance_metrics = checker_data.get("performance")
+                        if performance_metrics:
+                            t_final_val = performance_metrics.get("T_final")
+                            wt_val = performance_metrics.get("WT_weighted_time")
+                            w_val = performance_metrics.get("W_energy") # Use the key from checker.py
 
-                        if t_final_val is not None and wt_val is not None and w_val is not None:
-                             result["t_final"] = t_final_val
-                             result["wt"] = wt_val
-                             result["w"] = w_val
-                             debug_print(f"Extracted Metrics for {jar_basename}: T_final={result['t_final']}, WT={result['wt']}, W={result['w']}")
+                            # Validate that all metrics were found and are numeric
+                            if t_final_val is not None and wt_val is not None and w_val is not None and \
+                            isinstance(t_final_val, (int, float)) and \
+                            isinstance(wt_val, (int, float)) and \
+                            isinstance(w_val, (int, float)):
+
+                                result["t_final"] = float(t_final_val)
+                                result["wt"] = float(wt_val)
+                                result["w"] = float(w_val)
+                                debug_print(f"Extracted Metrics for {jar_basename}: T_final={result['t_final']}, WT={result['wt']}, W={result['w']}")
+                            else:
+                                # Handle case where 'performance' exists but metrics are missing/invalid
+                                missing = []
+                                if t_final_val is None: missing.append("T_final")
+                                if wt_val is None: missing.append("WT_weighted_time")
+                                if w_val is None: missing.append("W_energy")
+                                checker_status = "CHECKER_ERROR"
+                                checker_details = f"Correct verdict but failed to extract/validate metrics ({', '.join(missing)}) from performance data."
+                                debug_print(f"Metric extraction/validation failed for {jar_basename}. Performance data: {performance_metrics}")
+                                result["t_final"] = result["wt"] = result["w"] = None # Ensure reset
                         else:
-                             checker_status = "CHECKER_ERROR" # Treat missing metrics as error
-                             checker_details = "Correct verdict but failed to parse all metrics (T_final, WT, W) from checker output."
-                             debug_print(f"Metric parsing failed for {jar_basename}. Matches: T={t_final_match}, WT={wt_match}, W={w_match}")
-                             result["t_final"] = result["wt"] = result["w"] = None # Ensure reset
+                            # Handle case where result is "Success" but "performance" key is missing
+                            checker_status = "CHECKER_ERROR"
+                            checker_details = "Correct verdict but 'performance' section missing in checker output."
+                            debug_print(f"Performance section missing for {jar_basename}. Checker data: {checker_data}")
+                            result["t_final"] = result["wt"] = result["w"] = None # Ensure reset
 
-                    except ValueError as e_parse:
-                        print(f"ERROR: Checker verdict CORRECT for {jar_basename}, but failed parsing metrics: {e_parse}", file=sys.stderr)
+                    except (TypeError, ValueError, KeyError) as e_metric:
+                        # Catch errors during metric access/conversion (though .get should prevent most KeyErrors)
+                        print(f"ERROR: Checker verdict CORRECT for {jar_basename}, but failed processing metrics: {e_metric}", file=sys.stderr)
                         checker_status = "CHECKER_ERROR"
-                        checker_details = f"Correct verdict but metric parsing failed: {e_parse}"
+                        checker_details = f"Correct verdict but metric processing failed: {e_metric}"
                         result["t_final"] = result["wt"] = result["w"] = None
-                    except Exception as e_re:
-                        print(f"ERROR: Regex error during metric parsing for {jar_basename}: {e_re}", file=sys.stderr)
-                        checker_status = "CHECKER_ERROR"
-                        checker_details = f"Internal tester error (regex) parsing metrics: {e_re}"
-                        result["t_final"] = result["wt"] = result["w"] = None
-                else:
-                    # Handle INCORRECT or other unexpected verdicts
+
+                elif checker_data.get("result") == "Fail":
+                    # Handle INCORRECT cases based on the JSON output
                     checker_status = "INCORRECT"
-                    verdict_line = next((line for line in checker_proc.stdout.splitlines() if line.strip().startswith("Verdict:")), "Verdict: INCORRECT (No details found)")
-                    checker_details = verdict_line.strip()
-                    debug_print(f"Checker result for {jar_basename}: INCORRECT. Details: {checker_details}")
-                # --- (End Checker result parsing) ---
+                    # Extract error details from the 'errors' list
+                    errors_list = checker_data.get("errors", ["Checker reported 'Fail' but no specific errors found."])
+                    # Join the errors into a single string for details
+                    checker_details = "; ".join(errors_list)
+                    # Optional: Truncate if the error string is potentially very long
+                    # max_detail_len = 250
+                    # if len(checker_details) > max_detail_len:
+                    #     checker_details = checker_details[:max_detail_len] + "..."
+                    debug_print(f"Checker result for {jar_basename}: INCORRECT/Fail. Details: {checker_details}")
+                    result["t_final"] = result["wt"] = result["w"] = None # Ensure metrics are None for failed runs
+
+                else:
+                    # Handle unexpected 'result' values
+                    checker_status = "CHECKER_ERROR"
+                    res_val = checker_data.get("result", "None")
+                    checker_details = f"Checker returned unexpected result value: '{res_val}'"
+                    debug_print(f"Unexpected checker result for {jar_basename}: {checker_details}. Full data: {checker_data}")
+                    result["t_final"] = result["wt"] = result["w"] = None
 
             except subprocess.TimeoutExpired:
                 print(f"ERROR: Checker timed out for {jar_basename}.", file=sys.stderr)

@@ -19,8 +19,8 @@ CHECKER = os.path.join("unit_2","hw_5","checker.py") # 使用的checker
 GENERATOR = os.path.join("hackgen.py") # 数据生成器，需要有genData方法返回str类型数据
 REJECTED = []
 PASSED = []
-USR = "" # 统一身份验证账号
-PASSWORD = "" # 密码
+USR = "23371265" # 统一身份验证账号
+PASSWORD = "xqk200510060050" # 密码
 HACK_DIR = os.path.join("hack")
 CNT = 5 # 第几次作业作业
 spec = importlib.util.spec_from_file_location("hackgen", GENERATOR)
@@ -127,7 +127,11 @@ def select_point():
 def std_send_point(std: playwright.sync_api.Locator, text: str):
     std.fill(text)
 
-def seng_point(page: playwright.sync_api.Page):
+def send_point(page: playwright.sync_api.Page):
+    enabled_button = page.locator('div[role="list"] button:not([disabled="disabled"])').nth(0)
+    # 执行操作，例如点击
+    enabled_button.click()
+    # time.sleep(1000)
     block = page.locator("div.v-card__text div.v-input textarea")
     stdin_block = block.nth(0)
     stdout_block = block.nth(1)
@@ -184,10 +188,7 @@ def get_course(page: playwright.sync_api.Page):
     url = "/".join(url.split('/')[:-1]) + "/mutual"
     page.goto(url)
     time.sleep(0.5)
-    enabled_button = page.locator('div[role="list"] button:not([disabled="disabled"])').nth(0)
-    # 执行操作，例如点击
-    enabled_button.click()
-    # time.sleep(1000)
+   
 
 def ready_to_break(page: playwright.sync_api.Page):
     hacks = page.locator("div > div:nth-child(9) > div.container.pa-0.container--fluid > div:nth-child(2) > div > div > div > div > div.v-list-item__content.mx-3 > div.v-list-item__subtitle > div:nth-child(2) > span")
@@ -215,21 +216,25 @@ def main(Usr, passWd):
         login(page, Usr, passWd)
         get_course(page)
         while (True):
+            url = ""
             if ready_to_break(page):
                 break
-            cold, submmited = seng_point(page)
+            cold, submmited = send_point(page)
             if cold:
                 wait = page.locator("div.mb-1 > p").text_content()
                 print(wait)
                 wait = re.findall("\d+", wait)[0]
                 print(wait)
+                url = page.url
                 time.sleep(int(wait) + 1)
-                continue
-            if not submmited:
+                page.goto(url)
+                page.wait_for_url("**/mutual")
+            elif not submmited:
                 pass
                 print("SUBMIT IS REJECTED!!!")
             print(f"SUBMITED: {PASSED}")
             print(f"REJECTED: {REJECTED}")
+            page.reload()
         browser.close()  
 
 if __name__ == "__main__":
