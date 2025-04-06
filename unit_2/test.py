@@ -436,72 +436,6 @@ class JarTester:
             # Use print for potential errors during critical cleanup
             print(f"ERROR: Exception during process termination for PID {pid}: {e}", file=sys.stderr)
 
-    # --- (Keep _timed_input_feeder, _output_reader as they are) ---
-    @staticmethod
-    def _timed_input_feeder(process, requests, start_event, error_flag):
-        """Thread function to feed input to the JAR process at specific times."""
-        pid = process.pid
-        debug_print(f"Input feeder started for PID {pid}")
-        try:
-            debug_print(f"Input feeder waiting for start event for PID {pid}")
-            start_event.wait()
-            if error_flag.is_set() or JarTester._interrupted: return # Check after wait
-
-            debug_print(f"Input feeder received start event for PID {pid}")
-            start_mono_time = time.monotonic()
-            request_count = len(requests)
-            for i, (req_time, req_data) in enumerate(requests):
-                if error_flag.is_set() or JarTester._interrupted:
-                    debug_print(f"Input feeder stopping early for PID {pid} (error or interrupt)")
-                    break
-                current_mono_time = time.monotonic()
-                elapsed_time = current_mono_time - start_mono_time
-                sleep_duration = req_time - elapsed_time
-                if sleep_duration > 0:
-                    sleep_end_time = time.monotonic() + sleep_duration
-                    while time.monotonic() < sleep_end_time:
-                        if error_flag.is_set() or JarTester._interrupted:
-                            debug_print(f"Input feeder woken early from sleep for PID {pid} (error or interrupt)")
-                            return
-                        check_interval = min(0.05, sleep_end_time - time.monotonic()) # Fine-tune check interval
-                        if check_interval > 0: time.sleep(check_interval)
-                if error_flag.is_set() or JarTester._interrupted:
-                    debug_print(f"Input feeder stopping after sleep for PID {pid} (error or interrupt)")
-                    break
-                try:
-                    # debug_print(f"Input feeder feeding request {i+1}/{request_count} to PID {pid}: {req_data}")
-                    process.stdin.write(req_data + '\n')
-                    process.stdin.flush()
-                except (BrokenPipeError, OSError) as e:
-                    if not error_flag.is_set() and not JarTester._interrupted:
-                        debug_print(f"Input feeder: Pipe broken/OS error detected for PID {pid}")
-                    error_flag.set()
-                    break
-                except Exception as e:
-                    print(f"ERROR: Input feeder: Unexpected error writing to PID {pid}: {e}", file=sys.stderr)
-                    debug_print(f"Input feeder: Exception during write for PID {pid}", exc_info=True)
-                    error_flag.set()
-                    break
-            debug_print(f"Input feeder finished loop for PID {pid}. Error={error_flag.is_set()}, Interrupt={JarTester._interrupted}")
-            if not error_flag.is_set() and not JarTester._interrupted:
-                try:
-                    debug_print(f"Input feeder closing stdin for PID {pid}")
-                    process.stdin.close()
-                    debug_print(f"Input feeder successfully closed stdin for PID {pid}")
-                except (BrokenPipeError, OSError):
-                    debug_print(f"Input feeder: Pipe already closed or OS error during stdin close for PID {pid}")
-                except Exception as e:
-                    print(f"ERROR: Input feeder: Error closing stdin for PID {pid}: {e}", file=sys.stderr)
-                    debug_print(f"Input feeder: Exception during stdin close for PID {pid}", exc_info=True)
-            else:
-                debug_print(f"Input feeder skipping stdin close due to error/interrupt for PID {pid}")
-        except Exception as e:
-            print(f"FATAL: Input feeder thread crashed for PID {pid}: {e}", file=sys.stderr)
-            debug_print(f"Input feeder thread exception for PID {pid}", exc_info=True)
-            error_flag.set()
-        finally:
-            debug_print(f"Input feeder thread exiting for PID {pid}")
-
     @staticmethod
     def _output_reader(pipe, output_queue, stream_name, pid, error_flag):
         debug_print(f"Output reader ({stream_name}) started for PID {pid}")
@@ -531,10 +465,8 @@ class JarTester:
 
     # --- (Keep _run_single_jar as it is, it handles one JAR execution) ---
     @staticmethod
-    def _run_single_jar(jar_path, requests_data, input_data_path, current_wall_limit): # Changed gen_output_path to input_data_path
+    def _run_single_jar(jar_path, input_data_path, current_wall_limit):
         """Executes a single JAR, monitors it, saves stdout, and runs the checker."""
-        # No changes needed here, this function is already designed to run one JAR
-        # It correctly uses the global _interrupted flag and local error_flag
         jar_basename = os.path.basename(jar_path)
         debug_print(f"Starting run for JAR: {jar_basename} with Wall Limit: {current_wall_limit:.2f}s")
         start_wall_time = time.monotonic()
@@ -549,12 +481,10 @@ class JarTester:
             "t_final": None, "wt": None, "w": None, "final_score": 0.0,
             "input_data_path": input_data_path # Store the input path with the result
         }
-        input_feeder_thread = None
         stdout_reader_thread = None
         stderr_reader_thread = None
         stdout_queue = queue.Queue()
         stderr_queue = queue.Queue()
-        feeder_start_event = threading.Event()
         error_flag = threading.Event() # Local error flag for this JAR run
 
         try:
@@ -581,22 +511,55 @@ class JarTester:
                 return result # Return the failed result
 
 
-            debug_print(f"Starting I/O threads for PID {pid}")
-            input_feeder_thread = threading.Thread(target=JarTester._timed_input_feeder, args=(process, requests_data, feeder_start_event, error_flag), daemon=True)
+            debug_print(f"Starting output reader threads for PID {pid}")
             stdout_reader_thread = threading.Thread(target=JarTester._output_reader, args=(process.stdout, stdout_queue, "stdout", pid, error_flag), daemon=True)
             stderr_reader_thread = threading.Thread(target=JarTester._output_reader, args=(process.stderr, stderr_queue, "stderr", pid, error_flag), daemon=True)
-            input_feeder_thread.start()
             stdout_reader_thread.start()
             stderr_reader_thread.start()
+
+            input_content = None
+            try:
+                debug_print(f"Reading all input data from {input_data_path} for PID {pid}")
+                with open(input_data_path, 'r', encoding='utf-8') as f_in:
+                    input_content = f_in.read()
+                debug_print(f"Read {len(input_content)} characters from input file.")
+
+                if input_content is not None:
+                    debug_print(f"Writing {len(input_content)} characters of input at once to PID {pid}")
+                    process.stdin.write(input_content)
+                    process.stdin.flush()
+                    debug_print(f"Closing stdin for PID {pid}")
+                    process.stdin.close()
+                    debug_print(f"Successfully wrote input and closed stdin for PID {pid}")
+                else:
+                    debug_print(f"Input file {input_data_path} was empty or read failed. Closing stdin for PID {pid}.")
+                    process.stdin.close()
+
+            except FileNotFoundError:
+                print(f"ERROR: Input data file not found: {input_data_path} for PID {pid}", file=sys.stderr)
+                result["status"] = "CRASHED"
+                result["error_details"] = f"Input data file not found: {input_data_path}"
+                error_flag.set()
+            except (BrokenPipeError, OSError) as e:
+                print(f"WARNING: Error writing input or closing stdin for PID {pid} (process likely died): {e}", file=sys.stderr)
+                debug_print(f"BrokenPipeError/OSError during stdin write/close for PID {pid}")
+                error_flag.set()
+            except Exception as e:
+                print(f"ERROR: Unexpected error reading/writing input for PID {pid}: {e}", file=sys.stderr)
+                debug_print(f"Exception during input processing for PID {pid}", exc_info=True)
+                result["status"] = "CRASHED"
+                result["error_details"] = f"Failed to read/write input: {e}"
+                error_flag.set()
+                try:
+                    if process.stdin and not process.stdin.closed:
+                        process.stdin.close()
+                except Exception: pass
 
             debug_print(f"Starting monitoring loop for PID {pid}")
             monitor_loops = 0
             process_exited_normally = False
             while True:
                 monitor_loops += 1
-                # Signal feeder to start ASAP
-                if not feeder_start_event.is_set(): feeder_start_event.set()
-
                 try:
                     if not ps_proc.is_running():
                         debug_print(f"Monitor loop {monitor_loops}: ps_proc.is_running() is False for PID {pid}. Breaking.")
@@ -681,7 +644,7 @@ class JarTester:
             # Wait for I/O threads with a timeout
             debug_print(f"Waiting for I/O threads to finish for PID {pid}")
             thread_join_timeout = 2.0 # Increased timeout slightly
-            threads_to_join = [t for t in [input_feeder_thread, stdout_reader_thread, stderr_reader_thread] if t and t.is_alive()]
+            threads_to_join = [t for t in [stdout_reader_thread, stderr_reader_thread] if t and t.is_alive()]
             start_join_time = time.monotonic()
             while threads_to_join and time.monotonic() - start_join_time < thread_join_timeout:
                 for t in threads_to_join[:]: # Iterate copy for removal
@@ -819,7 +782,6 @@ class JarTester:
 
             # Final check on threads - they should be done or daemonized
             debug_print(f"Final check join for threads of PID {pid}")
-            if input_feeder_thread and input_feeder_thread.is_alive(): input_feeder_thread.join(timeout=0.1)
             if stdout_reader_thread and stdout_reader_thread.is_alive(): stdout_reader_thread.join(timeout=0.1)
             if stderr_reader_thread and stderr_reader_thread.is_alive(): stderr_reader_thread.join(timeout=0.1)
             debug_print(f"Exiting finally block for PID {pid}")
@@ -1605,7 +1567,7 @@ class JarTester:
                     return None
 
                 future_to_jar = {
-                    executor.submit(JarTester._run_single_jar, jar_file, requests_data, input_data_path, round_wall_time_limit): jar_file
+                    executor.submit(JarTester._run_single_jar, jar_file, input_data_path, round_wall_time_limit): jar_file
                     for jar_file in JarTester._jar_files
                 }
                 debug_print(f"Round {round_num}: Submitted {len(future_to_jar)} JAR tasks.")
