@@ -2,7 +2,6 @@
 
 # tester.py
 import ast
-import json
 import os
 import sys
 import subprocess
@@ -18,7 +17,6 @@ from collections import defaultdict
 import numpy as np
 import concurrent.futures
 import random # Added for preset selection
-import shutil # Needed for potential future cleanup, good practice
 import traceback # For logging errors from threads
 
 # --- Configuration ---
