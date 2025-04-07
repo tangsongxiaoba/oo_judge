@@ -30,6 +30,7 @@ LOG_DIR = "logs" # Define log directory constant
 TMP_DIR = "tmp"  # Define temporary file directory constant
 DEFAULT_GEN_MAX_TIME = 50.0 # Default generator -t value if not specified in preset
 DEFAULT_PARALLEL_ROUNDS = 16 # Default number of rounds to run in parallel
+CLEANUP_SUCCESSFUL_ROUNDS = True
 
 # --- Generator Argument Presets ---
 # (Keep your GEN_PRESET_COMMANDS list as is)
@@ -465,7 +466,7 @@ class JarTester:
 
     # --- (Keep _run_single_jar as it is, it handles one JAR execution) ---
     @staticmethod
-    def _run_single_jar(jar_path, input_data_path, current_wall_limit):
+    def _run_single_jar(jar_path, input_data_path, current_wall_limit, round_num):
         """Executes a single JAR, monitors it, saves stdout, and runs the checker."""
         jar_basename = os.path.basename(jar_path)
         debug_print(f"Starting run for JAR: {jar_basename} with Wall Limit: {current_wall_limit:.2f}s")
@@ -761,11 +762,8 @@ class JarTester:
             # Save stdout if content exists OR if the run failed/was interrupted (for debugging)
             save_stdout = stdout_content or result["status"] not in ["PENDING", "RUNNING", "CORRECT"]
             if save_stdout:
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                rand_id = random.randint(1000, 9999)
                 safe_jar_basename = re.sub(r'[^\w.-]', '_', jar_basename)
-                # Include PID in filename for better debugging
-                stdout_filename = f"stdout_{safe_jar_basename}_p{pid}_{timestamp}_{rand_id}.log"
+                stdout_filename = f"output_{safe_jar_basename}_{round_num}.txt"
                 stdout_filepath = os.path.abspath(os.path.join(TMP_DIR, stdout_filename))
                 try:
                     os.makedirs(TMP_DIR, exist_ok=True) # Ensure dir exists
@@ -960,14 +958,10 @@ class JarTester:
 
     # --- (Keep _generate_data as it is) ---
     @staticmethod
-    def _generate_data(gen_args_list):
+    def _generate_data(gen_args_list, round_num, seed_value):
         """Calls gen.py with provided args, returns requests, writes output to unique tmp file."""
         # Generate a unique filename for this round's input data
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        rand_id = random.randint(1000, 9999)
-        # Include thread name/id in filename if running rounds in parallel for easier debugging
-        thread_name = threading.current_thread().name.replace("ThreadPoolExecutor-","T") # Shorten it
-        input_filename = f"input_{thread_name}_{timestamp}_{rand_id}.txt"
+        input_filename = f"input_{seed_value}_{round_num}.txt"
         input_filepath = os.path.abspath(os.path.join(TMP_DIR, input_filename))
         os.makedirs(os.path.dirname(input_filepath), exist_ok=True) # Ensure TMP_DIR exists
 
@@ -979,7 +973,6 @@ class JarTester:
             command = [sys.executable, JarTester._gen_script_path] + gen_args_list
             debug_print(f"Running generator: {' '.join(command)}")
 
-            # Slightly longer timeout for generator?
             gen_timeout = 20.0
             gen_proc = subprocess.run(
                 command, capture_output=True, text=True, timeout=gen_timeout, check=True, encoding='utf-8', errors='replace'
@@ -1039,7 +1032,6 @@ class JarTester:
             requests_data.sort(key=lambda x: x[0])
             debug_print(f"Successfully parsed {len(requests_data)} requests.")
             return requests_data, input_filepath
-            # --- (End Request Parsing Logic) ---
 
         except FileNotFoundError:
             print(f"ERROR: Generator script not found at '{JarTester._gen_script_path}'", file=sys.stderr)
@@ -1465,7 +1457,6 @@ class JarTester:
                 args_list.append(str(value)) # Ensure value is string for subprocess
         return args_list
 
-    # --- NEW: Worker function for a single round ---
     @staticmethod
     def _run_one_round(round_num):
         """Executes all steps for a single test round."""
@@ -1480,7 +1471,9 @@ class JarTester:
         round_results = None
         selected_preset_cmd = "<Not Selected>"
         input_data_path = None
-        round_wall_time_limit = MIN_WALL_TIME_LIMIT # Default
+        round_wall_time_limit = MIN_WALL_TIME_LIMIT
+        current_seed = -1 # 初始化 seed
+        full_preset_cmd = "<Not Set>" # 初始化 full_preset_cmd
 
         try:
             # --- Select Preset and Determine Wall Time Limit ---
@@ -1516,7 +1509,7 @@ class JarTester:
 
             # 1. Generate Data
             debug_print(f"Round {round_num}: Generating data...")
-            requests_data, input_data_path = JarTester._generate_data(gen_args_list)
+            requests_data, input_data_path = JarTester._generate_data(gen_args_list, round_num, current_seed)
 
             if requests_data is None:
                 print(f"ERROR [{thread_name}] Round {round_num}: Failed to generate data (Preset: {full_preset_cmd}). Skipping round execution.", file=sys.stderr)
@@ -1547,52 +1540,45 @@ class JarTester:
             # 2. Run JARs Concurrently (Inner Parallelism)
             if not JarTester._jar_files:
                  print(f"ERROR [{thread_name}] Round {round_num}: No JAR files found to test.", file=sys.stderr)
+                 # Cleanup generated input file if it exists
+                 if input_data_path and os.path.exists(input_data_path):
+                      try: os.remove(input_data_path)
+                      except Exception: pass
                  return None
 
             results_this_round = []
-            # Adjust worker count based on system resources and number of JARs
-            # Avoid overwhelming the system if many rounds run concurrently
-            # Maybe slightly reduce workers per round if many rounds are parallel
-            num_jars = len(JarTester._jar_files)
-            # Simple heuristic: max_workers per round = max(2, min(num_jars, (os.cpu_count() or 2)))
-            # This needs tuning based on observation. Let's keep the original logic for now.
-            max_workers_per_round = min(num_jars, (os.cpu_count() or 4) * 2 + 1)
-            debug_print(f"Round {round_num}: Running {num_jars} JARs with max {max_workers_per_round} inner workers...")
+            max_workers_per_round = min(len(JarTester._jar_files), (os.cpu_count() or 4) * 2 + 1)
+            debug_print(f"Round {round_num}: Running {len(JarTester._jar_files)} JARs with max {max_workers_per_round} inner workers...")
 
             # Inner ThreadPoolExecutor for JARs within this round
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers_per_round, thread_name_prefix=f'JarExec_R{round_num}') as executor:
                 # Check for interrupt *before* submitting tasks
                 if JarTester._interrupted:
                     debug_print(f"Round {round_num}: Interrupted before submitting JAR tasks.")
+                    if input_data_path and os.path.exists(input_data_path) and not CLEANUP_SUCCESSFUL_ROUNDS: # Only delete if not cleaning up passed rounds later
+                        try: os.remove(input_data_path)
+                        except Exception: pass
                     return None
 
                 future_to_jar = {
-                    executor.submit(JarTester._run_single_jar, jar_file, input_data_path, round_wall_time_limit): jar_file
+                    executor.submit(JarTester._run_single_jar, jar_file, input_data_path, round_wall_time_limit, round_num): jar_file
                     for jar_file in JarTester._jar_files
                 }
                 debug_print(f"Round {round_num}: Submitted {len(future_to_jar)} JAR tasks.")
 
                 completed_count = 0
                 for future in concurrent.futures.as_completed(future_to_jar):
-                     # Check for interrupt frequently while waiting for JARs
                      if JarTester._interrupted:
                          debug_print(f"Round {round_num}: Interrupted during JAR execution processing.")
-                         # Don't break immediately, let already running futures finish?
-                         # Or cancel pending ones? For simplicity, let's just note it.
-                         # The _run_single_jar checks _interrupted flag internally.
 
                      jar_file = future_to_jar[future]
                      jar_basename = os.path.basename(jar_file)
                      try:
                          result = future.result()
-                         # Add round info to result for context if needed later
                          result["round_num"] = round_num
                          results_this_round.append(result)
                          completed_count += 1
-                         # Avoid excessive printing from worker threads, maybe log progress?
-                         # debug_print(f"Round {round_num}: JAR {completed_count}/{len(future_to_jar)} completed ({jar_basename}: {result.get('status','?')})")
                      except concurrent.futures.CancelledError:
-                          # This shouldn't happen unless we explicitly cancel
                           print(f"WARNING [{thread_name}] Round {round_num}: Run for {jar_basename} was cancelled (unexpected).", file=sys.stderr)
                      except Exception as exc:
                         # Log exceptions from the _run_single_jar future
@@ -1613,13 +1599,121 @@ class JarTester:
 
             # Check interrupt *after* JAR execution block finishes
             if JarTester._interrupted:
-                 debug_print(f"Round {round_num}: Interrupted after JAR execution completed. Skipping scoring and history update.")
-                 # Clean up input file? Or keep for debugging? Let's keep it for now.
-                 return None # Don't proceed to scoring/logging/history
+                debug_print(f"Round {round_num}: Interrupted after JAR execution completed. Skipping scoring and history update.")
+                if input_data_path and os.path.exists(input_data_path) and not CLEANUP_SUCCESSFUL_ROUNDS:
+                    try: os.remove(input_data_path)
+                    except Exception: pass
+                return None # Don't proceed to scoring/logging/history
+
+            failed_jars_in_round = [r for r in results_this_round if r.get("status") not in ["CORRECT", "PENDING", "RUNNING", "INTERRUPTED"]]
+            if failed_jars_in_round:
+                # Create a unique filename for this round's errors using the seed
+                error_log_filename = f"errors_{round_num}_{current_seed}.log"
+                error_log_filepath = os.path.abspath(os.path.join(LOG_DIR, error_log_filename))
+                debug_print(f"Round {round_num}: Failures detected. Logging errors to separate file: {error_log_filepath}")
+                try:
+                    # Write error details for this round to the specific file.
+                    # No lock needed here, as this file is unique to this round/thread.
+                    with open(error_log_filepath, "w", encoding="utf-8", errors='replace') as f_err:
+                        f_err.write(f"--- Error Log for Test Round {round_num} ---\n")
+                        f_err.write(f"Seed: {current_seed}\n")
+                        f_err.write(f"Preset Command Used: {full_preset_cmd}\n") # Log the command with seed
+                        f_err.write(f"Input Data File Path: {input_data_path if input_data_path else '<Not Available>'}\n")
+                        f_err.write(f"Wall Time Limit Applied: {round_wall_time_limit:.1f}s\n")
+                        f_err.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        f_err.write("-" * 40 + "\n\n")
+
+                        # Iterate only through the failing JARs for this round
+                        for r in failed_jars_in_round:
+                            jar_name = r.get("jar_file", "UnknownJAR")
+                            status = r.get("status", "UNKNOWN")
+                            f_err.write(f"--- Failing JAR: {jar_name} ---\n")
+                            f_err.write(f"Status: {status}\n")
+                            f_err.write(f"Error Details: {r.get('error_details', '')}\n")
+
+                            # Log path to stdout file for this failing JAR
+                            stdout_log = r.get("stdout_log_path")
+                            f_err.write(f"Stdout Log File Path: {stdout_log if stdout_log else '<Not Saved or Error>'}\n")
+
+                            # Log stderr content directly for this failing JAR
+                            f_err.write("--- Stderr Content ---\n")
+                            stderr = r.get("stderr", [])
+                            if stderr:
+                                MAX_ERR_LOG_LINES = 200 # Use a potentially larger limit for error logs
+                                for i, err_line in enumerate(stderr):
+                                    if i < MAX_ERR_LOG_LINES: f_err.write(f"  {err_line.strip()}\n")
+                                    elif i == MAX_ERR_LOG_LINES: f_err.write(f"  ... (stderr truncated after {MAX_ERR_LOG_LINES} lines)\n"); break
+                                if len(stderr) <= MAX_ERR_LOG_LINES: f_err.write("  <End of Stderr>\n")
+                            else:
+                                f_err.write("  <No stderr captured>\n")
+                            f_err.write("--- End Stderr ---\n\n") # Add space before next failing JAR
+
+                    # Optionally inform user on console
+                    print(f"INFO [{thread_name}] Round {round_num}: Errors occurred. Details saved to {error_log_filepath}")
+
+                except Exception as e_err_log:
+                    # Log failure to write the specific error log to the main console/stderr
+                    print(f"ERROR [{thread_name}] Round {round_num}: Failed to write separate error log file {error_log_filepath}: {e_err_log}", file=sys.stderr)
 
             # 3. Calculate Performance Scores for this round
             debug_print(f"Round {round_num}: Calculating scores...")
             JarTester._calculate_scores(results_this_round) # Modifies results_this_round in-place
+
+            if CLEANUP_SUCCESSFUL_ROUNDS and results_this_round: # Check if flag is set and results exist
+                all_passed = True
+                failed_jar_outputs_to_keep = [] # Store paths of outputs from failed jars
+                successful_jar_outputs_to_delete = [] # Store paths of outputs from successful jars
+
+                for r in results_this_round:
+                    status = r.get("status")
+                    stdout_path = r.get("stdout_log_path")
+
+                    if status != "CORRECT":
+                        all_passed = False # Mark that not all JARs passed
+                        if stdout_path and os.path.exists(stdout_path):
+                            failed_jar_outputs_to_keep.append(stdout_path)
+                        # Note: Even if status is not CORRECT, we still need to check others
+                    else: # Status is CORRECT
+                        if stdout_path and os.path.exists(stdout_path):
+                            # Mark this successful output for potential deletion
+                            successful_jar_outputs_to_delete.append(stdout_path)
+
+                if all_passed:
+                    # All JARs passed, delete input and ALL output files
+                    files_to_remove = []
+                    if input_data_path and os.path.exists(input_data_path):
+                        files_to_remove.append(input_data_path)
+                    # Add all successful outputs (which is all outputs in this case)
+                    files_to_remove.extend(successful_jar_outputs_to_delete)
+
+                    if files_to_remove:
+                        debug_print(f"Round {round_num}: All JARs passed. Cleaning up {len(files_to_remove)} temporary files...")
+                        for file_path in files_to_remove:
+                            try:
+                                os.remove(file_path)
+                                debug_print(f"  Deleted: {file_path}")
+                            except OSError as e: # Catch potential OS errors like permission denied
+                                print(f"WARNING [{threading.current_thread().name}] Round {round_num}: Failed to delete temp file {file_path}: {e}", file=sys.stderr)
+                            except Exception as e: # Catch any other unexpected errors
+                                print(f"WARNING [{threading.current_thread().name}] Round {round_num}: Unexpected error deleting temp file {file_path}: {e}", file=sys.stderr)
+                else:
+                    # At least one JAR failed. Keep the input file. Keep outputs of failed JARs. Delete outputs of successful JARs.
+                    if successful_jar_outputs_to_delete: # Only cleanup if there were successful ones
+                        debug_print(f"Round {round_num}: Some JARs failed. Keeping input file and {len(failed_jar_outputs_to_keep)} failed outputs. Cleaning up {len(successful_jar_outputs_to_delete)} successful outputs...")
+                        for file_path in successful_jar_outputs_to_delete:
+                            try:
+                                os.remove(file_path)
+                                debug_print(f"  Deleted (successful output): {file_path}")
+                            except OSError as e:
+                                print(f"WARNING [{threading.current_thread().name}] Round {round_num}: Failed to delete temp file {file_path}: {e}", file=sys.stderr)
+                            except Exception as e:
+                                print(f"WARNING [{threading.current_thread().name}] Round {round_num}: Unexpected error deleting temp file {file_path}: {e}", file=sys.stderr)
+                    else:
+                        debug_print(f"Round {round_num}: Some JARs failed, but no successful outputs found/exist to cleanup.")
+
+                # Optional: Add a debug message if input is being kept due to failures
+                if not all_passed and input_data_path and os.path.exists(input_data_path):
+                    debug_print(f"  Keeping input file (due to failures): {input_data_path}")
 
             # Prepare results package to return
             round_results = {
@@ -1653,8 +1747,11 @@ class JarTester:
                      print(f"ERROR [{thread_name}] Round {round_num}: Also failed to log fatal worker error: {e_log_fatal}", file=sys.stderr)
             # Clean up input file if it exists
             if input_data_path and os.path.exists(input_data_path):
-                 try: os.remove(input_data_path)
-                 except Exception: pass
+                if not CLEANUP_SUCCESSFUL_ROUNDS:
+                    try: os.remove(input_data_path)
+                    except Exception: pass
+                else:
+                    debug_print(f"Round {round_num}: Worker exception occurred, preserving input file {input_data_path} despite cleanup mode.")
             return None # Indicate round failed
 
     # --- Main test method modified for parallel rounds ---
@@ -1830,6 +1927,9 @@ if __name__ == "__main__":
                         help=f"Number of test rounds to run concurrently (default: {DEFAULT_PARALLEL_ROUNDS})")
     # Keep debug flag
     parser.add_argument("--debug", action='store_true', help="Enable detailed debug output to stderr.")
+    parser.add_argument("--cleanup", action='store_true',
+                        help="Delete temporary input/output files for rounds where ALL JARs pass successfully.")
+
     # Remove ignored generator args from parser if they truly do nothing now
     # parser.add_argument("--gen-num-requests", type=int, help="[IGNORED] Use presets instead.")
     # parser.add_argument("--gen-max-time", type=float, help="[IGNORED] Use presets instead.")
@@ -1842,6 +1942,10 @@ if __name__ == "__main__":
         # sys.stdout.reconfigure(line_buffering=True)
         # sys.stderr.reconfigure(line_buffering=True)
         debug_print("Detailed debugging enabled.")
+
+    if args.cleanup:
+        CLEANUP_SUCCESSFUL_ROUNDS = True
+        debug_print("Cleanup mode enabled: Temp files for successful rounds will be deleted.")
 
     if args.parallel_rounds < 1:
         print("ERROR: --parallel-rounds must be at least 1.", file=sys.stderr)
