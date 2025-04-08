@@ -19,36 +19,36 @@ THISSTDIN = None
 
 GEN_PRESET_COMMANDS = [
     "gen.py -np 20 -ns 5 -t 50.0 --hce",
-    "gen.py -np 65 -ns 5 -t 40.0 --min-interval 0.0 --max-interval 0.5 --hce",
-    "gen.py -np 64 -ns 6 -t 30.0 --min-interval 0.0 --max-interval 0.3 --hce",
+    "gen.py -np 65 -ns 5 -t 50.0 --min-interval 0.0 --max-interval 0.5 --hce",
+    "gen.py -np 64 -ns 6 -t 50.0 --min-interval 0.0 --max-interval 0.3 --hce",
     "gen.py -np 6 -ns 2 -t 50.0 --min-interval 10.0 --max-interval 15.0 --hce",
-    "gen.py -np 2 -ns 0 -t 10.0 --min-interval 0.1 --max-interval 0.5 --hce",
-    "gen.py -np 0 -ns 1 -t 10.0 --hce",
+    "gen.py -np 2 -ns 0 -t 50.0 --min-interval 0.1 --max-interval 0.5 --hce",
+    "gen.py -np 0 -ns 1 -t 50.0 --hce",
     "gen.py -np 0 -ns 6 -t 50.0 --hce",
-    "gen.py -np 30 -ns 2 -t 10.0 --start-time 1.0 --force-start-passengers 30 --hce",
-    "gen.py -np 20 -ns 1 -t 30.0 --start-time 1.0 --force-end-passengers 20 --hce",
-    "gen.py -np 15 -ns 1 -t 5.0 --start-time 5.0 --max-time 5.0 --hce",
+    "gen.py -np 30 -ns 2 -t 50.0 --start-time 1.0 --force-start-passengers 30 --hce",
+    "gen.py -np 20 -ns 1 -t 50.0 --start-time 1.0 --force-end-passengers 20 --hce",
+    "gen.py -np 15 -ns 1 -t 50.0 --start-time 5.0 --max-time 5.0 --hce",
     "gen.py -np 45 -ns 3 -t 50.0 --start-time 10.0 --burst-size 45 --burst-time 10.0 --hce",
     "gen.py -np 55 -ns 5 -t 50.0 --burst-size 30 --burst-time 25.0 --hce",
-    "gen.py -np 60 -ns 5 -t 45.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 15 --burst-time 20.0 --hce",
-    "gen.py -np 55 -ns 5 -t 30.0 --priority-bias extremes --priority-bias-ratio 0.9 --hce",
-    "gen.py -np 50 -ns 5 -t 40.0 --priority-bias middle --priority-bias-ratio 0.9 --priority-middle-range 10 --hce",
-    "gen.py -np 48 -ns 2 -t 40.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 2 --hce",
+    "gen.py -np 60 -ns 5 -t 50.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 15 --burst-time 20.0 --hce",
+    "gen.py -np 55 -ns 5 -t 50.0 --priority-bias extremes --priority-bias-ratio 0.9 --hce",
+    "gen.py -np 50 -ns 5 -t 50.0 --priority-bias middle --priority-bias-ratio 0.9 --priority-middle-range 10 --hce",
+    "gen.py -np 48 -ns 2 -t 50.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 2 --hce",
     "gen.py -np 45 -ns 5 -t 50.0 --extreme-floor-ratio 0.8 --hce",
     "gen.py -np 1 -ns 6 -t 50.0 --min-interval 7.0 --max-interval 9.0 --hce",
-    "gen.py -np 10 -ns 6 -t 20.0 --min-interval 0.1 --max-interval 1.5 --hce",
+    "gen.py -np 10 -ns 6 -t 50.0 --min-interval 0.1 --max-interval 1.5 --hce",
     "gen.py -np 10 -ns 5 -t 50.0 --start-time 40.0 --hce",
-    "gen.py -np 50 -ns 6 -t 40.0 --priority-bias extremes --priority-bias-ratio 0.7 --hce",
+    "gen.py -np 50 -ns 6 -t 50.0 --priority-bias extremes --priority-bias-ratio 0.7 --hce",
     "gen.py -np 40 -ns 6 -t 50.0 --extreme-floor-ratio 0.6 --hce",
     "gen.py -np 20 -ns 6 -t 50.0 --start-time 10.0 --burst-size 15 --burst-time 15.0 --hce",
-    "gen.py -np 50 -ns 5 -t 45.0 --extreme-floor-ratio 0.6 --priority-bias middle --priority-bias-ratio 0.7 --priority-middle-range 15 --hce",
-    "gen.py -np 54 -ns 6 -t 45.0 --extreme-floor-ratio 1.0 --priority-bias extremes --priority-bias-ratio 1.0 --hce",
+    "gen.py -np 50 -ns 5 -t 50.0 --extreme-floor-ratio 0.6 --priority-bias middle --priority-bias-ratio 0.7 --priority-middle-range 15 --hce",
+    "gen.py -np 54 -ns 6 -t 50.0 --extreme-floor-ratio 1.0 --priority-bias extremes --priority-bias-ratio 1.0 --hce",
     "gen.py -np 40 -ns 6 -t 50.0 --force-start-passengers 5 --burst-size 10 --burst-time 25.0 --priority-bias extremes --priority-bias-ratio 0.5 --extreme-floor-ratio 0.5 --hce",
-    "gen.py -np 30 -ns 6 -t 40.0 --start-time 15.0 --max-time 15.1 --force-start-passengers 30 --hce",
+    "gen.py -np 30 -ns 6 -t 50.0 --start-time 15.0 --max-time 15.1 --force-start-passengers 30 --hce",
     "gen.py -np 64 -ns 6 -t 50.0 --start-time 40.0 --max-time 40.2 --force-start-passengers 64 --hce",
-    "gen.py -np 40 -ns 6 -t 40.0 --start-time 1.0 --force-start-passengers 40 --min-interval 5.0 --max-interval 7.0 --hce",
+    "gen.py -np 40 -ns 6 -t 50.0 --start-time 1.0 --force-start-passengers 40 --min-interval 5.0 --max-interval 7.0 --hce",
     "gen.py -np 34 -ns 6 -t 50.0 --start-time 1.0 --burst-size 30 --burst-time 25.0 --hce",
-    "gen.py -np 1 -ns 6 -t 40.0 --start-time 1.0 --max-time 40.0 --min-interval 0.1 --max-interval 1.0 --hce",
+    "gen.py -np 1 -ns 6 -t 50.0 --start-time 1.0 --max-time 40.0 --min-interval 0.1 --max-interval 1.0 --hce",
 ]
 
 def run_std_jar(std_jar_path, stdin_path, timeout_seconds=300):
@@ -930,6 +930,167 @@ def ready_to_break(page: playwright.sync_api.Page, homework_id: int, hack_limit=
         import traceback
         print(traceback.format_exc())
         return False, None # 其他未知错误，无法判断，不停止
+    
+def sync_lists_and_ensure_waiting_data(hack_dir, std_jar_path, generator_path, num_generate):
+    global PASSED, REJECTED # 明确我们要修改全局列表
+
+    hack_waiting_dir = os.path.join(hack_dir, "waiting")
+    hack_passed_dir = os.path.join(hack_dir, "passed")
+    hack_rejected_dir = os.path.join(hack_dir, "rejected")
+
+    print("\n--- Synchronizing PASSED/REJECTED lists with directories ---")
+
+    # 确保目录存在 (虽然 main 里也做了，但这里再确认下无妨)
+    os.makedirs(hack_waiting_dir, exist_ok=True)
+    os.makedirs(hack_passed_dir, exist_ok=True)
+    os.makedirs(hack_rejected_dir, exist_ok=True)
+
+    # 从 passed 目录同步 PASSED 列表
+    try:
+        passed_files = {f.replace(".in", "") for f in os.listdir(hack_passed_dir) if f.endswith(".in")}
+        PASSED[:] = list(passed_files) # 使用切片赋值更新全局列表
+        print(f"INFO: Synced PASSED list from directory. Count: {len(PASSED)}")
+    except FileNotFoundError:
+        print(f"WARNING: Passed directory '{hack_passed_dir}' not found during sync.")
+        PASSED[:] = [] # 如果目录不存在，清空列表
+
+    # 从 rejected 目录同步 REJECTED 列表
+    try:
+        rejected_files = {f.replace(".in", "") for f in os.listdir(hack_rejected_dir) if f.endswith(".in")}
+        REJECTED[:] = list(rejected_files) # 使用切片赋值更新全局列表
+        print(f"INFO: Synced REJECTED list from directory. Count: {len(REJECTED)}")
+    except FileNotFoundError:
+        print(f"WARNING: Rejected directory '{hack_rejected_dir}' not found during sync.")
+        REJECTED[:] = [] # 如果目录不存在，清空列表
+
+    # 检查 waiting 目录中是否有可用的数据点
+    try:
+        waiting_files = [f for f in os.listdir(hack_waiting_dir) if f.endswith(".in")]
+        available_waiting_bases = {
+            f.replace(".in", "") for f in waiting_files
+            if f.replace(".in", "") not in PASSED and f.replace(".in", "") not in REJECTED
+        }
+        num_available = len(available_waiting_bases)
+        print(f"INFO: Found {num_available} available data points in '{hack_waiting_dir}' (excluding PASSED/REJECTED).")
+
+        if num_available == 0:
+            print(f"INFO: No available data found in '{hack_waiting_dir}'. Generating {num_generate} new data points...")
+            try:
+                # 调用现有的生成函数
+                generate_random_ones(std_jar_path, generator_path, hack_dir, num_generate)
+                # 注意: generate_random_ones 内部会生成 .in 和 .out 文件到 waiting 目录
+                # select_point 稍后会处理可能遗漏的 .out 或验证失败的情况
+            except Exception as e:
+                print(f"ERROR: Failed to generate random data when waiting directory was empty: {e}")
+                import traceback
+                print(traceback.format_exc())
+                # 即使生成失败，也继续尝试（可能之前生成的文件只是被移走了）
+        # else: # 如果有可用数据，则不需要生成
+            # print(f"INFO: Sufficient available data found in '{hack_waiting_dir}'. Skipping generation.")
+
+    except FileNotFoundError:
+        print(f"WARNING: Waiting directory '{hack_waiting_dir}' not found. Attempting to generate new data...")
+        try:
+            generate_random_ones(std_jar_path, generator_path, hack_dir, num_generate)
+        except Exception as e:
+            print(f"ERROR: Failed to generate random data after waiting directory not found: {e}")
+            import traceback
+            print(traceback.format_exc())
+
+    print("--- Synchronization and data check complete ---")
+
+def handle_cooldown(page: playwright.sync_api.Page, homework_id: int):
+    """
+    检查API的冷却状态，如果处于冷却中，则计算等待时间并休眠，然后重新加载页面。
+    """
+    print("\n--- Checking cooldown status via API ---")
+    cooldown_api_url = f"http://api.oo.buaa.edu.cn/homework/{homework_id}/mutual_test"
+    should_reload = False # 标记是否需要重新加载页面
+
+    try:
+        api_response = page.request.get(cooldown_api_url)
+        if api_response.ok:
+            data = api_response.json()
+            if data.get('success') and 'data' in data:
+                mutual_data = data['data']
+                is_cooling_down = mutual_data.get('cooling_down')
+                print(f"INFO: API cooldown status: {is_cooling_down}")
+
+                if is_cooling_down is True:
+                    submit_cd = mutual_data.get('submit_cd')
+                    last_submit_str = mutual_data.get('last_submit')
+                    current_time_str = mutual_data.get('current_time')
+
+                    if submit_cd is not None and last_submit_str and current_time_str:
+                        try:
+                            time_format = "%Y-%m-%d %H:%M:%S"
+                            # 为时区不匹配添加健壮性处理 (假设API时间是本地时间或UTC，但保持一致即可)
+                            # 如果需要更精确的时区处理，需要使用 pytz 等库
+                            last_submit_dt = datetime.strptime(last_submit_str, time_format)
+                            current_time_dt = datetime.strptime(current_time_str, time_format)
+                            cooldown_end_time = last_submit_dt + timedelta(seconds=submit_cd)
+                            wait_duration = cooldown_end_time - current_time_dt
+                            wait_seconds = max(0, wait_duration.total_seconds()) # 确保等待时间不为负
+
+                            if wait_seconds > 0:
+                                sleep_time = wait_seconds
+                                total_sleep_int = int(sleep_time)
+                                print(f"INFO: Currently in cooldown. Last submit: {last_submit_str}, CD: {submit_cd}s. Calculated wait time: {wait_seconds:.2f}s. Sleeping for {total_sleep_int} seconds...")
+                                last_msg_len = 0
+                                for i in range(total_sleep_int, 0, -1):
+                                    progress_message = f"Cooldown remaining: {i:>{len(str(total_sleep_int))}} seconds... "
+                                    print(' ' * last_msg_len, end='\r')
+                                    print(progress_message, end='\r', flush=True)
+                                    last_msg_len = len(progress_message)
+                                    time.sleep(1)
+                                print(' ' * last_msg_len, end='\r', flush=True)
+                                print("INFO: Cooldown finished.")
+                                should_reload = True # 等待结束后需要重新加载
+                            else:
+                                print("INFO: Cooldown period seems to have just ended according to API. Proceeding.")
+                                # 即使刚结束，也最好重新加载一下以获取最新状态
+                                should_reload = True
+
+                        except (ValueError, TypeError) as time_err:
+                            print(f"WARNING: Error parsing time strings or calculating cooldown: {time_err}. API Data: {mutual_data}. Falling back to default long wait (60s).")
+                            time.sleep(60) # 出错时默认等待较短时间，避免卡死太久
+                            should_reload = True
+                    else:
+                        print(f"WARNING: Missing required fields (submit_cd, last_submit, current_time) in API response for cooldown calculation. API Data: {mutual_data}. Assuming not in cooldown for now.")
+                        # 即使缺少字段，也可能需要重新加载页面以防万一
+                        should_reload = True
+            else:
+                print(f"WARNING: API request for cooldown status succeeded but response format unexpected. Response: {data}")
+                should_reload = True # 响应格式不对，也重新加载一下
+        else:
+            print(f"WARNING: API request for cooldown status failed with status {api_response.status}. Proceeding cautiously.")
+            # API失败，可能页面会卡住，尝试重新加载
+            should_reload = True
+
+    except playwright.sync_api.Error as req_err:
+        print(f"WARNING: Network error fetching cooldown status: {req_err}. Proceeding cautiously.")
+        should_reload = True # 网络错误后尝试重新加载
+    except json.JSONDecodeError as json_err:
+        print(f"WARNING: Error decoding cooldown API JSON response: {json_err}. Proceeding cautiously.")
+        should_reload = True # JSON解析错误后尝试重新加载
+    except Exception as api_exc:
+        print(f"WARNING: Unexpected error during cooldown check: {api_exc}. Proceeding cautiously.")
+        import traceback
+        print(traceback.format_exc())
+        should_reload = True # 未知错误后尝试重新加载
+
+    # 如果需要重新加载页面
+    if should_reload:
+        try:
+            print("INFO: Reloading page after cooldown check/wait...")
+            page.reload(wait_until="domcontentloaded") # 等待DOM加载完成
+            print("INFO: Page reloaded successfully.")
+        except playwright.sync_api.Error as reload_err:
+            print(f"ERROR: Failed to reload page after cooldown handling: {reload_err}. Attempting to continue...")
+        except Exception as e:
+            print(f"ERROR: Unexpected error during page reload after cooldown handling: {e}. Attempting to continue...")
+
+    print("--- Cooldown check finished ---")
 
 def main():
     config = load_config()
@@ -938,7 +1099,6 @@ def main():
     pwd = config['stu_pwd']
     debug_mode = config['hacker']['debug']
     num_generate = config['hacker']['num_generate']
-    course_id = config['hacker']['courseid']
 
     checker_path, generator_path, std_jar_path, hack_dir = calculate_paths(config)
 
@@ -971,72 +1131,9 @@ def main():
                 hack_attempts += 1
                 print(f"\n===== Hack Cycle {hack_attempts} =====")
 
-                print("INFO: Checking cooldown status via API...")
-                cooldown_api_url = f"http://api.oo.buaa.edu.cn/homework/{homework_id}/mutual_test"
+                sync_lists_and_ensure_waiting_data(hack_dir, std_jar_path, generator_path, num_generate)
 
-                try:
-                    api_response = page.request.get(cooldown_api_url)
-                    if api_response.ok:
-                        data = api_response.json()
-                        if data.get('success') and 'data' in data:
-                            mutual_data = data['data']
-                            is_cooling_down = mutual_data.get('cooling_down')
-                            print(f"INFO: API cooldown status: {is_cooling_down}")
-
-                            if is_cooling_down is True:
-                                submit_cd = mutual_data.get('submit_cd')
-                                last_submit_str = mutual_data.get('last_submit')
-                                current_time_str = mutual_data.get('current_time')
-
-                                if submit_cd is not None and last_submit_str and current_time_str:
-                                    try:
-                                        time_format = "%Y-%m-%d %H:%M:%S"
-                                        last_submit_dt = datetime.strptime(last_submit_str, time_format)
-                                        current_time_dt = datetime.strptime(current_time_str, time_format)
-                                        cooldown_end_time = last_submit_dt + timedelta(seconds=submit_cd)
-                                        wait_duration = cooldown_end_time - current_time_dt
-                                        wait_seconds = wait_duration.total_seconds()
-
-                                        if wait_seconds > 0:
-                                            # 加一点缓冲时间，例如 2 秒
-                                            sleep_time = wait_seconds + 2
-                                            total_sleep_int = int(sleep_time) # 取整用于循环
-                                            print(f"INFO: Currently in cooldown. Last submit: {last_submit_str}, CD: {submit_cd}s. Calculated wait time: {wait_seconds:.2f}s. Sleeping for {total_sleep_int} seconds...")
-                                            last_msg_len = 0 # 用于清除上一条消息
-                                            for i in range(total_sleep_int, 0, -1):
-                                                progress_message = f"Cooldown remaining: {i:>{len(str(total_sleep_int))}} seconds... " # 右对齐秒数
-                                                # 清除上一行进度条 (打印足够多的空格再\r)
-                                                print(' ' * last_msg_len, end='\r') 
-                                                print(progress_message, end='\r', flush=True)
-                                                last_msg_len = len(progress_message)
-                                                time.sleep(1) # 每次休眠1秒
-                                            print(' ' * last_msg_len, end='\r', flush=True) 
-                                            print("INFO: Cooldown finished. Reloading page...")
-                                            page.reload(wait_until="domcontentloaded")
-                                        else:
-                                            print("INFO: Cooldown period seems to have just ended according to API. Proceeding.")
-                                            page.reload(wait_until="domcontentloaded")
-
-                                    except (ValueError, TypeError) as time_err:
-                                        print(f"WARNING: Error parsing time strings or calculating cooldown: {time_err}. API Data: {mutual_data}. Falling back to default long wait (1800s).")
-                                        time.sleep(1800) # 出错时默认等待
-                                        page.reload(wait_until="domcontentloaded")
-                                else:
-                                    print(f"WARNING: Missing required fields (submit_cd, last_submit, current_time) in API response for cooldown calculation. API Data: {mutual_data}. Assuming not in cooldown for now, or might fail later.")
-                                    # 这里可以选择是继续还是等待，当前选择继续
-
-                        else:
-                            print(f"WARNING: API request for cooldown status succeeded but response format unexpected. Response: {data}")
-                    else:
-                        print(f"WARNING: API request for cooldown status failed with status {api_response.status}. Proceeding cautiously.")
-                        # 可以选择重试或等待，这里暂时继续
-
-                except playwright.sync_api.Error as req_err:
-                    print(f"WARNING: Network error fetching cooldown status: {req_err}. Proceeding cautiously.")
-                except json.JSONDecodeError as json_err:
-                    print(f"WARNING: Error decoding cooldown API JSON response: {json_err}. Proceeding cautiously.")
-                except Exception as api_exc:
-                    print(f"WARNING: Unexpected error during cooldown check: {api_exc}. Proceeding cautiously.")
+                handle_cooldown(page, homework_id)
 
                 should_break, target_alias_name = ready_to_break(page, homework_id)
                 if should_break:

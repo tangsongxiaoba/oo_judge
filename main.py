@@ -91,7 +91,7 @@ class JarProcessor:
     def _read_config():
         """Read config.yml to determine the homework number and class path"""
         try:
-            with open('config.yml', 'r') as file:
+            with open('config.yml', 'r', encoding='utf-8') as file:
                 config = yaml.safe_load(file)
                 return config or {}  # Return empty dict if None
         except Exception as e:
