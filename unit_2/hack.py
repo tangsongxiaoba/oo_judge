@@ -693,32 +693,31 @@ def send_point(page: playwright.sync_api.Page, hack_dir, checker_path, generator
     submit_button = page.locator("button.primary--text span.v-btn__content").filter(has_text="提交").nth(0)
     print("INFO: Clicking submit button.")
     submit_button.click(timeout=5000)
-    page.pause()
 
     # --- 处理提交结果 ---
     cold = False
 
     try:
-        snackbar = page.locator("#appSnackbar > div > div")
-        text = snackbar.text_content(timeout=1000)
+        card = page.locator("#app > div:nth-child(6) > div > div > div.v-card__title.py-1.pl-2.pr-1")
+        text = card.text_content(timeout=1000)
         print(f"INFO: {text}")
-        if "冷却期" in text:
-            cold = True
-            end = page.locator("button.primary--text span.v-btn__content").nth(0)
-            end.click(timeout=1000)
+        if "错误" in text:
+            print(f"INFO: Moving data pair {THISSTDIN} to rejected directory due to submission failure/error.")
+            REJECTED.append(THISSTDIN)
+            move_file_pair(THISSTDIN, hack_waiting_dir, hack_rejected_dir)
+            return False, False
     except:
         try:
-            card = page.locator("#app > div:nth-child(6) > div > div > div.v-card__title.py-1.pl-2.pr-1")
-            text = card.text_content(timeout=1000)
+            snackbar = page.locator("#appSnackbar > div > div")
+            text = snackbar.text_content(timeout=1500)
             print(f"INFO: {text}")
-            if "错误" in text:
-                print(f"INFO: Moving data pair {THISSTDIN} to rejected directory due to submission failure/error.")
-                REJECTED.append(THISSTDIN)
-                move_file_pair(THISSTDIN, hack_waiting_dir, hack_rejected_dir)
-                return False, False
+            if "冷却期" in text:
+                cold = True
+                end = page.locator("button.primary--text span.v-btn__content").nth(0)
+                end.click(timeout=1000)
         except:
             cold = True
- 
+
     if cold:
         return True, False
     
