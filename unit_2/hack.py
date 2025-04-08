@@ -11,6 +11,7 @@ import playwright.sync_api
 import json
 import yaml
 import concurrent.futures
+from datetime import datetime, timedelta
 
 PASSED = []
 REJECTED = []
@@ -805,6 +806,7 @@ def get_course(page: playwright.sync_api.Page, config):
         try:
             page.goto(mutual_url)
             print("INFO: Mutual testing page loaded successfully.")
+            return homework_id
         except playwright.sync_api.TimeoutError:
             print(f"WARNING: Timed out waiting for '互测房间' element on {mutual_url}. Page might be slow or structure changed.")
             # 检查当前 URL 是否正确，如果错误则抛出异常
@@ -825,15 +827,91 @@ def get_course(page: playwright.sync_api.Page, config):
         print("CRITICAL ERROR: homework_id is None after API processing. This should not happen.")
         raise Exception("Internal logic error: homework_id is None")
 
-def ready_to_break(page: playwright.sync_api.Page, hack_limit=3):
-    """检查是否所有同学的 hack 次数都达到了限制"""
-    hacks = page.locator("div > div:nth-child(9) > div.container.pa-0.container--fluid > div:nth-child(2) > div > div > div > div > div.v-list-item__content.mx-3 > div.v-list-item__subtitle > div:nth-child(2) > span")
-    counts = hacks.count()
-    for i in range(counts):
-        cnt = re.findall(r"(\d)/\d", hacks.nth(i).text_content())[0]
-        if int(cnt) >= hack_limit:
-            return True
-    return False
+def ready_to_break(page: playwright.sync_api.Page, homework_id: int, hack_limit=3):
+    api_url = f"http://api.oo.buaa.edu.cn/homework/{homework_id}/mutual_test/room/self"
+    print(f"INFO: Checking hack status via API: {api_url}")
+
+    try:
+        api_response = page.request.get(api_url)
+
+        if not api_response.ok:
+            print(f"ERROR: API request failed with status {api_response.status}: {api_response.status_text}")
+            print(f"Response body: {api_response.text()}")
+            return False, None # API 失败，无法判断，不停止
+
+        try:
+            data = api_response.json()
+        except json.JSONDecodeError as e:
+            print(f"ERROR: Failed to parse JSON response from room API: {e}")
+            print(f"Raw response: {api_response.text()}")
+            return False, None # JSON 解析失败，无法判断，不停止
+
+        # 验证基本结构并获取自身 alias_name 和成员列表
+        if (data.get('success') and
+                'data' in data and
+                'mutual_test' in data['data'] and
+                'my_alias_name' in data['data']['mutual_test'] and
+                'members' in data['data'] and
+                isinstance(data['data']['members'], list)):
+
+            my_alias_name = data['data']['mutual_test']['my_alias_name']
+            members = data['data']['members']
+            print(f"INFO: My alias name is {my_alias_name}. Checking {len(members)} members.")
+
+            potential_target_alias = None # 存储第一个遇到的非自己成员的 alias_name
+
+            for member in members:
+                member_alias = member.get('alias_name')
+                if member_alias is None:
+                    print(f"WARNING: Member found without alias_name: {member}")
+                    continue # 跳过无效成员数据
+
+                # 跳过自己
+                if member_alias == my_alias_name:
+                    continue
+
+                # 记录第一个遇到的其他人
+                if potential_target_alias is None:
+                    potential_target_alias = member_alias
+
+                # 检查 hacked.your_success
+                hacked_info = member.get('hacked', {})
+                your_success_str = hacked_info.get('your_success')
+
+                if your_success_str is not None:
+                    try:
+                        your_success_count = int(your_success_str)
+                        print(f"INFO: Checking member {member_alias}: your_success = {your_success_count}")
+                        if your_success_count >= hack_limit:
+                            print(f"INFO: Hack limit ({hack_limit}) reached for member {member_alias}. Stopping condition met.")
+                            return True, None # 达到停止条件
+                    except ValueError:
+                        print(f"WARNING: Could not convert 'your_success' ({your_success_str}) to int for member {member_alias}.")
+                        # 可以选择将此视为 0 或跳过，这里选择视为未达到限制
+                else:
+                     print(f"WARNING: 'your_success' key missing in 'hacked' info for member {member_alias}.")
+
+            # 如果循环完成，说明没有人达到 hack_limit
+            if potential_target_alias is not None:
+                print(f"INFO: Hack limit not reached for any member. Potential target alias: {potential_target_alias}")
+                return False, potential_target_alias # 未达到停止条件，返回 false 和一个目标
+            else:
+                print("INFO: No other members found in the room or all other members had invalid data. Cannot determine target.")
+                return False, None # 没有找到其他成员，也算未达到停止条件，但无目标返回
+
+        else:
+            print("ERROR: Unexpected API response structure or missing key fields ('success', 'data', 'mutual_test', 'my_alias_name', 'members').")
+            print(f"API Response Data: {data}")
+            return False, None # 结构错误，无法判断，不停止
+
+    except playwright.sync_api.Error as e:
+        print(f"ERROR: Playwright network error during room API request: {e}")
+        return False, None # 网络错误，无法判断，不停止
+    except Exception as e:
+        print(f"ERROR: An unexpected error occurred in ready_to_break: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return False, None # 其他未知错误，无法判断，不停止
 
 def main():
     config = load_config()
@@ -842,6 +920,7 @@ def main():
     pwd = config['stu_pwd']
     debug_mode = config['hacker']['debug']
     num_generate = config['hacker']['num_generate']
+    course_id = config['hacker']['courseid']
 
     checker_path, generator_path, std_jar_path, hack_dir = calculate_paths(config)
 
@@ -854,6 +933,7 @@ def main():
     print("--- Starting Playwright ---")
     with sync_playwright() as p:
         browser = None # 初始化为 None
+        homework_id = None
         try:
             browser = p.chromium.launch(headless=not debug_mode)
             print(f"INFO: Browser launched (Headless: {not debug_mode}).")
@@ -863,7 +943,9 @@ def main():
             # --- 登录和导航 ---
             login(page, usr, pwd)
             print("INFO: Login attempt finished.")
-            get_course(page, config)
+            homework_id = get_course(page, config)
+            if homework_id is None: # <--- 健壮性检查
+                raise Exception("Failed to retrieve homework_id from get_course.")
             print("INFO: Navigation to mutual test page finished.")
 
             hack_attempts = 0
@@ -871,9 +953,75 @@ def main():
                 hack_attempts += 1
                 print(f"\n===== Hack Cycle {hack_attempts} =====")
 
-                if ready_to_break(page):
-                    print("INFO: Hack limit reached for all rooms or condition met. Exiting loop.")
+                print("INFO: Checking cooldown status via API...")
+                cooldown_api_url = f"http://api.oo.buaa.edu.cn/homework/{homework_id}/mutual_test"
+
+                try:
+                    api_response = page.request.get(cooldown_api_url)
+                    if api_response.ok:
+                        data = api_response.json()
+                        if data.get('success') and 'data' in data:
+                            mutual_data = data['data']
+                            is_cooling_down = mutual_data.get('cooling_down')
+                            print(f"INFO: API cooldown status: {is_cooling_down}")
+
+                            if is_cooling_down is True:
+                                submit_cd = mutual_data.get('submit_cd')
+                                last_submit_str = mutual_data.get('last_submit')
+                                current_time_str = mutual_data.get('current_time')
+
+                                if submit_cd is not None and last_submit_str and current_time_str:
+                                    try:
+                                        time_format = "%Y-%m-%d %H:%M:%S"
+                                        last_submit_dt = datetime.strptime(last_submit_str, time_format)
+                                        current_time_dt = datetime.strptime(current_time_str, time_format)
+                                        cooldown_end_time = last_submit_dt + timedelta(seconds=submit_cd)
+                                        wait_duration = cooldown_end_time - current_time_dt
+                                        wait_seconds = wait_duration.total_seconds()
+
+                                        if wait_seconds > 0:
+                                            # 加一点缓冲时间，例如 2 秒
+                                            sleep_time = wait_seconds + 2
+                                            print(f"INFO: Currently in cooldown. Last submit: {last_submit_str}, CD: {submit_cd}s. Calculated wait time: {wait_seconds:.2f}s. Sleeping for {sleep_time:.0f} seconds...")
+                                            time.sleep(sleep_time)
+                                            print("INFO: Cooldown finished. Reloading page...")
+                                            page.reload(wait_until="domcontentloaded") # 等待DOM加载完成
+                                        else:
+                                            print("INFO: Cooldown period seems to have just ended according to API. Proceeding.")
+                                            # 可能需要刷新一下以确保状态更新
+                                            page.reload(wait_until="domcontentloaded")
+
+                                    except (ValueError, TypeError) as time_err:
+                                        print(f"WARNING: Error parsing time strings or calculating cooldown: {time_err}. API Data: {mutual_data}. Falling back to default long wait (1800s).")
+                                        time.sleep(1800) # 出错时默认等待
+                                        page.reload(wait_until="domcontentloaded")
+                                else:
+                                    print(f"WARNING: Missing required fields (submit_cd, last_submit, current_time) in API response for cooldown calculation. API Data: {mutual_data}. Assuming not in cooldown for now, or might fail later.")
+                                    # 这里可以选择是继续还是等待，当前选择继续
+
+                        else:
+                            print(f"WARNING: API request for cooldown status succeeded but response format unexpected. Response: {data}")
+                    else:
+                        print(f"WARNING: API request for cooldown status failed with status {api_response.status}. Proceeding cautiously.")
+                        # 可以选择重试或等待，这里暂时继续
+
+                except playwright.sync_api.Error as req_err:
+                    print(f"WARNING: Network error fetching cooldown status: {req_err}. Proceeding cautiously.")
+                except json.JSONDecodeError as json_err:
+                    print(f"WARNING: Error decoding cooldown API JSON response: {json_err}. Proceeding cautiously.")
+                except Exception as api_exc:
+                    print(f"WARNING: Unexpected error during cooldown check: {api_exc}. Proceeding cautiously.")
+
+                should_break, target_alias_name = ready_to_break(page, homework_id)
+                if should_break:
+                    print("INFO: Hack limit reached for at least one person according to API. Exiting loop.")
                     break
+                else:
+                    if target_alias_name is not None:
+                        print(f"INFO: No hack limit reached yet. A potential target alias is {target_alias_name} (currently unused).")
+                    else:
+                        print("INFO: No hack limit reached yet, and no specific target alias identified (or API error occurred).")
+                        sys.exit(-1)
 
                 cold, submitted = send_point(page, hack_dir, checker_path, generator_path, std_jar_path, num_generate)
 
