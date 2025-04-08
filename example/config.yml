@@ -4,8 +4,9 @@ stu_id: 23066666 # 学号
 stu_pwd: 'password' # 密码
 jar_base_dir: jar
 logs_dir: logs
+tmp_dir: tmp
 hacker:
-  std_jar_name: d42012e7546248594c26a7d9e865429c88e6ea8e.jar # 标准输出jar包的文件名
+  std_jar_name: std.jar # 标准输出jar包的文件名
   waiting_dir: hack/waiting
   checker_name: checker.py             # checker脚本的文件名
   generator_name: gen.py               # generator脚本的文件名
@@ -17,3 +18,8 @@ update:
   log_prefix: errors
   log_suffix: .log
   target_line_prefix: 'Input Data File Path:'
+test:
+  hce: True
+  parallel: 16
+  debug: False
+  cleanup: True

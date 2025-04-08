@@ -1,0 +1,86 @@
+- gen.py -np 20 -ns 5 -t 50.0
+- gen.py -np 65 -ns 5 -t 40.0 --min-interval 0.0 --max-interval 0.5 --hce
+- gen.py -np 90 -ns 5 -t 70.0 --min-interval 0.5 --max-interval 1.5
+- gen.py -np 6 -ns 2 -t 100.0 --min-interval 10.0 --max-interval 15.0
+- gen.py -np 70 -ns 5 -t 150.0 --min-interval 0.5 --max-interval 2.5
+- gen.py -np 2 -ns 0 -t 10.0 --min-interval 0.1 --max-interval 0.5
+- gen.py -np 30 -ns 2 -t 10.0 --start-time 1.0 --force-start-passengers 30
+- gen.py -np 20 -ns 1 -t 30.0 --start-time 1.0 --force-end-passengers 20
+- gen.py -np 15 -ns 1 -t 5.0 --start-time 5.0 --max-time 5.0
+- gen.py -np 45 -ns 3 -t 10.1 --start-time 10.0 --burst-size 45 --burst-time 10.0
+- gen.py -np 55 -ns 5 -t 50.0 --burst-size 30
+- gen.py -np 80 -ns 10 -t 80.0 --min-interval 2.0 --max-interval 5.0 --start-time 2.0 --force-start-passengers 25 --burst-size 30 --burst-time 41.0 --force-end-passengers 25
+- gen.py -np 60 -ns 5 -t 40.0 --max-time 40.0 --hce --force-start-passengers 20 --burst-size 25 --burst-time 8.0
+- gen.py -np 35 -ns 5 -t 49.5 --max-time 49.5 --hce --burst-size 20 --burst-time 48.0
+- gen.py -np 15 -ns 5 -t 100.0 --min-interval 8.0 --max-interval 12.0 --burst-size 8 --burst-time 50.0
+- gen.py -np 28 -ns 2 -t 30.0 --min-interval 0.5 --max-interval 0.5
+- gen.py -np 55 -ns 5 -t 30.0 --priority-bias extremes --priority-bias-ratio 0.9
+- gen.py -np 50 -ns 5 -t 40.0 --priority-bias middle --priority-bias-ratio 0.9 --priority-middle-range 10
+- gen.py -np 48 -ns 2 -t 40.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 2
+- gen.py -np 10 -ns 5 -t 120.0 --min-interval 5.0 --max-interval 10.0 --priority-bias extremes --priority-bias-ratio 0.9
+- gen.py -np 35 -ns 5 -t 30.0 --priority-bias extremes --priority-bias-ratio 1.0
+- gen.py -np 45 -ns 5 -t 60.0 --extreme-floor-ratio 0.8
+- gen.py -np 1 -ns 6 -t 50.0 --max-time 50.0 --min-interval 7.0 --max-interval 9.0 --hce
+- gen.py -np 10 -ns 6 -t 20.0 --max-time 20.0 --min-interval 0.1 --max-interval 1.5 --hce
+- gen.py -np 10 -ns 5 -t 50.0 --start-time 40.0
+- gen.py -np 30 -ns 5 -t 50.0 --max-time 50.0 --burst-size 20 --burst-time 35.0 --hce
+- gen.py -np 60 -ns 6 -t 45.0 --max-time 45.0 --min-interval 0.1 --max-interval 0.8 --hce
+- gen.py -np 50 -ns 6 -t 40.0 --max-time 40.0 --priority-bias extremes --priority-bias-ratio 0.7 --hce
+- gen.py -np 40 -ns 6 -t 60.0 --max-time 50.0 --extreme-floor-ratio 0.6 --hce
+- gen.py -np 20 -ns 6 -t 70.0 --max-time 50.0 --start-time 10.0 --burst-size 15 --burst-time 15.0 --hce
+- gen.py -np 60 -ns 5 -t 45.0 --max-time 45.0 --start-time 1.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 15 --burst-time 20.0 --priority-bias extremes --priority-bias-ratio 0.3 --hce
+- gen.py -np 64 -ns 6 -t 20.0 --max-time 20.0 --hce --min-interval 0.0 --max-interval 0.2 --priority-bias extremes --priority-bias-ratio 0.4
+- gen.py -np 50 -ns 5 -t 45.0 --max-time 45.0 --hce --extreme-floor-ratio 0.6 --priority-bias middle --priority-bias-ratio 0.7 --priority-middle-range 15
+- gen.py -np 45 -ns 5 -t 45.0 --max-time 45.0 --hce --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.6
+- gen.py -np 50 -ns 6 -t 70.0 --min-interval 1.0 --max-interval 4.0 --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.7
+- gen.py -np 20 -ns 5 -t 50.0
+- gen.py -np 67 -ns 3 -t 40.0 --min-interval 0.0 --max-interval 0.3 --hce
+- gen.py -np 90 -ns 8 -t 80.0 --min-interval 0.5 --max-interval 1.0
+- gen.py -np 30 -ns 10 -t 200.0 --min-interval 3.0 --max-interval 8.0
+- gen.py -np 40 -ns 6 -t 50.0 --start-time 1.0 --force-start-passengers 40 --min-interval 6.0 --max-interval 8.0 --hce
+- gen.py -np 30 -ns 5 -t 50.0 --start-time 1.0 --force-end-passengers 30 --max-time 49.9 --hce
+- gen.py -np 30 -ns 18 -t 100.0 --start-time 5.0 --burst-size 30 --burst-time 5.1 --min-interval 4.0 --max-interval 6.0
+- gen.py -np 40 -ns 15 -t 80.0 --burst-size 35 --burst-time 40.0 --min-interval 1.0 --max-interval 5.0
+- gen.py -np 20 -ns 6 -t 50.0 --start-time 1.0 --burst-size 15 --burst-time 48.0 --hce
+- gen.py -np 60 -ns 8 -t 90.0 --force-start-passengers 10 --burst-size 20 --burst-time 45.0 --force-end-passengers 10 --min-interval 1.0 --max-interval 6.0
+- gen.py -np 54 -ns 6 -t 40.0 --priority-bias extremes --priority-bias-ratio 0.9 --hce
+- gen.py -np 50 -ns 16 -t 100.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 10 --min-interval 1.0 --max-interval 5.0
+- gen.py -np 44 -ns 6 -t 48.0 --extreme-floor-ratio 0.8 --hce
+- gen.py -np 40 -ns 17 -t 120.0 --extreme-floor-ratio 0.7 --min-interval 2.0 --max-interval 6.0
+- gen.py -np 1 -ns 6 -t 50.0 --start-time 1.0 --min-interval 7.0 --max-interval 8.0 --hce
+- gen.py -np 1 -ns 6 -t 40.0 --start-time 1.0 --max-time 40.0 --min-interval 0.1 --max-interval 1.0 --hce
+- gen.py -np 1 -ns 20 -t 150.0 --start-time 1.0 --min-interval 6.0 --max-interval 7.0
+- gen.py -np 1 -ns 20 -t 100.0 --start-time 1.0 --min-interval 0.5 --max-interval 3.0
+- gen.py -np 40 -ns 6 -t 50.0 --start-time 1.0 --burst-size 35 --burst-time 25.0 --hce
+- gen.py -np 50 -ns 15 -t 100.0 --start-time 1.0 --min-interval 1.0 --max-interval 5.0 --burst-size 40 --burst-time 50.0
+- gen.py -np 64 -ns 6 -t 30.0 --max-time 30.0 --min-interval 0.0 --max-interval 0.3 --hce
+- gen.py -np 70 -ns 18 -t 90.0 --min-interval 0.1 --max-interval 0.8
+- gen.py -np 50 -ns 6 -t 50.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 10 --burst-time 25.0 --priority-bias extremes --priority-bias-ratio 0.5 --extreme-floor-ratio 0.5 --hce
+- gen.py -np 40 -ns 19 -t 140.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 10 --burst-time 70.0 --priority-bias middle --priority-bias-ratio 0.4 --priority-middle-range 5 --extreme-floor-ratio 0.6 --min-interval 1.0 --max-interval 5.0
+- gen.py -np 30 -ns 5 -t 45.0 --min-interval 0.5 --max-interval 1.5 --hce
+- gen.py -np 40 -ns 8 -t 60.0 --min-interval 0.5 --max-interval 2.0
+- gen.py -np 64 -ns 6 -t 35.0 --min-interval 0.0 --max-interval 0.3 --hce
+- gen.py -np 85 -ns 10 -t 70.0 --min-interval 0.1 --max-interval 0.8
+- gen.py -np 30 -ns 18 -t 80.0 --min-interval 0.2 --max-interval 1.0
+- gen.py -np 40 -ns 6 -t 40.0 --start-time 1.0 --force-start-passengers 40 --min-interval 5.0 --max-interval 7.0 --hce
+- gen.py -np 30 -ns 5 -t 49.9 --start-time 1.0 --force-end-passengers 30 --max-time 49.9 --hce
+- gen.py -np 40 -ns 18 -t 90.0 --start-time 5.0 --burst-size 40 --burst-time 5.1 --min-interval 3.0 --max-interval 5.0
+- gen.py -np 34 -ns 6 -t 50.0 --start-time 1.0 --burst-size 30 --burst-time 25.0 --hce
+- gen.py -np 60 -ns 15 -t 90.0 --force-start-passengers 10 --burst-size 25 --burst-time 45.0 --force-end-passengers 10 --min-interval 0.5 --max-interval 4.0
+- gen.py -np 54 -ns 6 -t 40.0 --priority-bias extremes --priority-bias-ratio 0.9 --hce
+- gen.py -np 50 -ns 16 -t 80.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 10 --min-interval 0.5 --max-interval 4.0
+- gen.py -np 60 -ns 5 -t 30.0 --priority-bias extremes --priority-bias-ratio 0.4 --priority-bias middle --priority-middle-range 15 --min-interval 0.1 --max-interval 0.5 --hce
+- gen.py -np 44 -ns 6 -t 48.0 --extreme-floor-ratio 0.8 --hce
+- gen.py -np 40 -ns 17 -t 90.0 --extreme-floor-ratio 0.7 --min-interval 1.0 --max-interval 5.0
+- gen.py -np 1 -ns 6 -t 40.0 --start-time 1.0 --max-time 40.0 --min-interval 0.1 --max-interval 1.0 --hce
+- gen.py -np 1 -ns 20 -t 90.0 --start-time 1.0 --min-interval 0.5 --max-interval 2.0
+- gen.py -np 40 -ns 6 -t 50.0 --start-time 1.0 --burst-size 35 --burst-time 25.0 --hce
+- gen.py -np 50 -ns 18 -t 80.0 --start-time 1.0 --min-interval 0.5 --max-interval 4.0 --burst-size 40 --burst-time 40.0
+- gen.py -np 64 -ns 6 -t 30.0 --max-time 30.0 --min-interval 0.0 --max-interval 0.3 --hce
+- gen.py -np 70 -ns 18 -t 70.0 --min-interval 0.1 --max-interval 0.6
+- gen.py -np 40 -ns 4 -t 60.0 --min-interval 0.5 --max-interval 2.0 --priority-bias middle --priority-bias-ratio 0.4 --burst-size 10 --burst-time 30.0 --hce
+- gen.py -np 50 -ns 8 -t 80.0 --min-interval 0.8 --max-interval 3.0 --extreme-floor-ratio 0.3 --priority-bias extremes --priority-bias-ratio 0.2 --burst-size 15 --burst-time 40.0
+- gen.py -np 54 -ns 6 -t 45.0 --extreme-floor-ratio 1.0 --priority-bias extremes --priority-bias-ratio 1.0 --hce
+- gen.py -np 50 -ns 15 -t 90.0 --extreme-floor-ratio 1.0 --priority-bias extremes --priority-bias-ratio 1.0 --min-interval 0.5 --max-interval 3.0
+- gen.py -np 30 -ns 6 -t 40.0 --start-time 15.0 --max-time 15.1 --force-start-passengers 30 --hce
+- gen.py -np 70 -ns 18 -t 80.0 --start-time 40.0 --max-time 40.2 --force-start-passengers 70

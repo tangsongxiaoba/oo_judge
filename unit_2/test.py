@@ -9,7 +9,6 @@ import time
 import signal
 import threading
 import queue
-import argparse
 import tempfile
 import psutil
 import re
@@ -18,8 +17,9 @@ import numpy as np
 import concurrent.futures
 import random # Added for preset selection
 import traceback # For logging errors from threads
+import yaml
 
-# --- Configuration ---
+# --- Default Configuration, will be replaced by config.yml ---
 CPU_TIME_LIMIT = 10.0  # seconds
 MIN_WALL_TIME_LIMIT = 120.0 # seconds - Renamed: Minimum wall time limit
 PERF_P_VALUE = 0.10
@@ -29,319 +29,6 @@ TMP_DIR = "tmp"  # Define temporary file directory constant
 DEFAULT_GEN_MAX_TIME = 50.0 # Default generator -t value if not specified in preset
 DEFAULT_PARALLEL_ROUNDS = 16 # Default number of rounds to run in parallel
 CLEANUP_SUCCESSFUL_ROUNDS = True
-
-# --- Generator Argument Presets ---
-# (Keep your GEN_PRESET_COMMANDS list as is)
-# GEN_PRESET_COMMANDS = [
-#     # === Baseline ===
-#     # "gen.py -n 25 -t 50.0",
-#     # === Load & Density ===
-#     "gen.py -n 70 -t 40.0 --min-interval 0.0 --max-interval 0.5 --hce",
-#     "gen.py -n 98 -t 70.0 --min-interval 0.1 --max-interval 0.8",
-#     "gen.py -n 8 -t 100.0 --min-interval 10.0 --max-interval 15.0",
-#     "gen.py -n 75 -t 150.0 --min-interval 0.5 --max-interval 2.5",
-#     # "gen.py -n 1 -t 10.0",
-#     "gen.py -n 2 -t 10.0 --min-interval 0.1 --max-interval 0.5",
-#     # "gen.py -n 1 -t 10.0 --hce",
-#     "gen.py -n 2 -t 10.0 --hce --min-interval 0.2 --max-interval 0.8",
-#     # === Timing & Bursts ===
-#     "gen.py -n 30 --start-time 1.0 --max-time 10.0 --force-start-requests 30", # Uses --max-time
-#     "gen.py -n 20 --start-time 1.0 --max-time 30.0 --force-end-requests 20", # Uses --max-time
-#     "gen.py -n 15 --start-time 5.0 --max-time 5.0",                             # Uses --max-time
-#     "gen.py -n 45 --start-time 10.0 --max-time 10.1 --burst-size 45 --burst-time 10.0", # Uses --max-time
-#     "gen.py -n 60 -t 50.0 --burst-size 30",
-#     "gen.py -n 90 -t 80.0 --start-time 2.0 --force-start-requests 25 --burst-size 30 --burst-time 41.0 --force-end-requests 25",
-#     "gen.py -n 65 -t 40.0 --hce --force-start-requests 20 --burst-size 25 --burst-time 8.0",
-#     "gen.py -n 40 -t 49.5 --hce --burst-size 20 --burst-time 48.0",
-#     "gen.py -n 20 -t 100.0 --min-interval 8.0 --max-interval 12.0 --burst-size 8 --burst-time 50.0",
-#     "gen.py -n 30 -t 30.0 --min-interval 0.5 --max-interval 0.5",
-#     # === Priority ===
-#     "gen.py -n 60 -t 30.0 --priority-bias extremes --priority-bias-ratio 0.9",
-#     "gen.py -n 55 -t 40.0 --priority-bias middle --priority-bias-ratio 0.9 --priority-middle-range 10",
-#     "gen.py -n 50 -t 40.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 2",
-#     "gen.py -n 15 -t 120.0 --min-interval 5.0 --max-interval 10.0 --priority-bias extremes --priority-bias-ratio 0.9",
-#     "gen.py -n 40 -t 30.0 --priority-bias extremes --priority-bias-ratio 1.0",
-#     # === Elevator Focus ===
-#     "gen.py -n 40 -t 30.0 --focus-elevator 1 --focus-ratio 1.0 --hce", # Added -t
-#     "gen.py -n 70 -t 48.0 --hce --focus-elevator 2 --focus-ratio 0.8",
-#     "gen.py -n 80 -t 60.0 --focus-elevator 4 --focus-ratio 0.9",
-#     "gen.py -n 40 -t 30.0 --focus-elevator 5 --focus-ratio 0.0",
-#     # === Floor Patterns ===
-#     "gen.py -n 50 -t 60.0 --extreme-floor-ratio 0.8",
-#     # === Complex Combinations ===
-#     "gen.py -n 65 -t 45.0 --start-time 1.0 --force-start-requests 5 --force-end-requests 5 --burst-size 15 --burst-time 20.0 --focus-elevator 3 --focus-ratio 0.5 --priority-bias extremes --priority-bias-ratio 0.3 --hce",
-#     "gen.py -n 60 -t 20.0 --hce --min-interval 0.0 --max-interval 0.2 --priority-bias extremes --priority-bias-ratio 0.4",
-#     "gen.py -n 55 -t 45.0 --hce --extreme-floor-ratio 0.6 --priority-bias middle --priority-bias-ratio 0.7 --priority-middle-range 15",
-#     "gen.py -n 50 -t 45.0 --hce --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.6",
-#     "gen.py -n 60 -t 70.0 --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.7",
-# ]
-GEN_PRESET_COMMANDS = [
-    # === Baseline (Mix Passengers & SCHE) ===
-    # OK: Moderate P/S, intervals likely okay. Assumes gen.py default interval isn't pathologically small.
-    "gen.py -np 20 -ns 5 -t 50.0",
-
-    # === Load & Density (Passengers Dominant) ===
-    # OK (--hce): HuCe constraints met. SCHE on different elevators.
-    "gen.py -np 65 -ns 5 -t 40.0 --min-interval 0.0 --max-interval 0.5 --hce", # Total 70
-    # RISKY (non-hce): -ns 5 with potentially small intervals. Increased min-interval slightly. Requires gen.py fix ideally.
-    "gen.py -np 90 -ns 5 -t 70.0 --min-interval 0.5 --max-interval 1.5",
-    # OK: Sparse requests, low chance of SCHE collision even without --hce.
-    "gen.py -np 6 -ns 2 -t 100.0 --min-interval 10.0 --max-interval 15.0",
-    # OK: Moderate density, -ns 5 over long time. Should be okay.
-    "gen.py -np 70 -ns 5 -t 150.0 --min-interval 0.5 --max-interval 2.5",
-    # OK: Very few P requests.
-    "gen.py -np 2 -ns 0 -t 10.0 --min-interval 0.1 --max-interval 0.5",
-    # OK (--hce): HuCe constraints met.
-    # === Timing & Passenger Bursts ===
-    # RISKY (non-hce): -ns 2 but all requests in <10s. Low chance but possible SCHE collision.
-    "gen.py -np 30 -ns 2 -t 10.0 --start-time 1.0 --force-start-passengers 30",
-    # RISKY (non-hce): -ns 1, OK.
-    "gen.py -np 20 -ns 1 -t 30.0 --start-time 1.0 --force-end-passengers 20",
-    # RISKY (non-hce): -ns 1, OK.
-    "gen.py -np 15 -ns 1 -t 5.0 --start-time 5.0 --max-time 5.0",
-    # RISKY (non-hce): -ns 3 concentrated in ~0.1s. Higher chance of SCHE collision. Needs gen.py fix ideally.
-    "gen.py -np 45 -ns 3 -t 10.1 --start-time 10.0 --burst-size 45 --burst-time 10.0",
-    # RISKY (non-hce): -ns 5 spread over 50s. Moderate risk.
-    "gen.py -np 55 -ns 5 -t 50.0 --burst-size 30",
-    # FIXED (non-hce): Increased min-interval significantly for -ns 10. Still assumes gen.py doesn't pathologically cluster.
-    "gen.py -np 80 -ns 10 -t 80.0 --min-interval 2.0 --max-interval 5.0 --start-time 2.0 --force-start-passengers 25 --burst-size 30 --burst-time 41.0 --force-end-passengers 25", # Note: -ns 10 needs care!
-    # OK (--hce): HuCe constraints met. Max time adjusted.
-    "gen.py -np 60 -ns 5 -t 40.0 --max-time 40.0 --hce --force-start-passengers 20 --burst-size 25 --burst-time 8.0", # Total 65
-    # OK (--hce): HuCe constraints met. Max time adjusted.
-    "gen.py -np 35 -ns 5 -t 49.5 --max-time 49.5 --hce --burst-size 20 --burst-time 48.0", # Total 40
-    # OK (non-hce): Sparse P, -ns 5 over 100s. Low risk.
-    "gen.py -np 15 -ns 5 -t 100.0 --min-interval 8.0 --max-interval 12.0 --burst-size 8 --burst-time 50.0",
-    # RISKY (non-hce): -ns 2 with fixed 0.5s interval. Possible SCHE collision.
-    "gen.py -np 28 -ns 2 -t 30.0 --min-interval 0.5 --max-interval 0.5",
-
-    # === Passenger Priority Focus ===
-    # RISKY (non-hce): -ns 5 over 30s. Moderate risk.
-    "gen.py -np 55 -ns 5 -t 30.0 --priority-bias extremes --priority-bias-ratio 0.9",
-    # RISKY (non-hce): -ns 5 over 40s. Moderate risk.
-    "gen.py -np 50 -ns 5 -t 40.0 --priority-bias middle --priority-bias-ratio 0.9 --priority-middle-range 10",
-    # RISKY (non-hce): -ns 2 over 40s. Lower risk.
-    "gen.py -np 48 -ns 2 -t 40.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 2",
-    # OK (non-hce): Sparse P, -ns 5 over 120s. Low risk.
-    "gen.py -np 10 -ns 5 -t 120.0 --min-interval 5.0 --max-interval 10.0 --priority-bias extremes --priority-bias-ratio 0.9",
-    # RISKY (non-hce): -ns 5 over 30s. Moderate risk.
-    "gen.py -np 35 -ns 5 -t 30.0 --priority-bias extremes --priority-bias-ratio 1.0",
-
-    # === Passenger Floor Patterns ===
-    # RISKY (non-hce): -ns 5 over 60s. Moderate risk.
-    "gen.py -np 45 -ns 5 -t 60.0 --extreme-floor-ratio 0.8",
-
-    # === SCHE Focused Tests ===
-    # --- SCHE Distribution & Timing ---
-    # OK (--hce): SCHE ONLY, spread out on different elevators. HuCe time limit ok.
-    "gen.py -np 1 -ns 6 -t 50.0 --max-time 50.0 --min-interval 7.0 --max-interval 9.0 --hce",
-    # OK (--hce): P + SCHE clustered early. HuCe rules ok.
-    "gen.py -np 10 -ns 6 -t 20.0 --max-time 20.0 --min-interval 0.1 --max-interval 1.5 --hce",
-    # RISKY (non-hce): -ns 5 late, concentrated in 10s. Moderate risk.
-    "gen.py -np 10 -ns 5 -t 50.0 --start-time 40.0",
-    # --- SCHE interacting with Passenger Loads ---
-    # OK (--hce): SCHE spread out (diff elevators), passenger burst later. HuCe time ok.
-    "gen.py -np 30 -ns 5 -t 50.0 --max-time 50.0 --burst-size 20 --burst-time 35.0 --hce", # Total 35
-    # OK (--hce): High passenger density + Max SCHE (diff elevators). HuCe time ok.
-    "gen.py -np 60 -ns 6 -t 45.0 --max-time 45.0 --min-interval 0.1 --max-interval 0.8 --hce", # Total 66
-    # OK (--hce): Extreme priority P + Max SCHE (diff elevators). HuCe time ok.
-    "gen.py -np 50 -ns 6 -t 40.0 --max-time 40.0 --priority-bias extremes --priority-bias-ratio 0.7 --hce", # Total 56
-    # OK (--hce): Extreme floor P + Max SCHE (diff elevators). HuCe time ok.
-    "gen.py -np 40 -ns 6 -t 60.0 --max-time 50.0 --extreme-floor-ratio 0.6 --hce", # Total 46, enforced max_time 50 for HuCe
-    # OK (--hce): Early passenger burst + Max SCHE (diff elevators). HuCe time ok.
-    "gen.py -np 20 -ns 6 -t 70.0 --max-time 50.0 --start-time 10.0 --burst-size 15 --burst-time 15.0 --hce", # Total 26, enforced max_time 50 for HuCe
-
-    # === Complex Combinations (Revisited for HW6) ===
-    # OK (--hce): Mix forces/burst/prio + SCHE (diff elevators). HuCe time ok.
-    "gen.py -np 60 -ns 5 -t 45.0 --max-time 45.0 --start-time 1.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 15 --burst-time 20.0 --priority-bias extremes --priority-bias-ratio 0.3 --hce", # Total 65
-    # OK (--hce): Very high density P/S, HuCe limit. SCHE on diff elevators. HuCe time ok.
-    "gen.py -np 64 -ns 6 -t 20.0 --max-time 20.0 --hce --min-interval 0.0 --max-interval 0.2 --priority-bias extremes --priority-bias-ratio 0.4", # Total 70
-    # OK (--hce): Extreme floor + middle prio P + SCHE (diff elevators). HuCe time ok.
-    "gen.py -np 50 -ns 5 -t 45.0 --max-time 45.0 --hce --extreme-floor-ratio 0.6 --priority-bias middle --priority-bias-ratio 0.7 --priority-middle-range 15", # Total 55
-    # OK (--hce): Extreme floor/prio P + SCHE (diff elevators). HuCe time ok.
-    "gen.py -np 45 -ns 5 -t 45.0 --max-time 45.0 --hce --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.6", # Total 50
-    # FIXED (non-hce): Replaced -ns 10 with -ns 6 and increased interval. Reduced risk.
-    "gen.py -np 50 -ns 6 -t 70.0 --min-interval 1.0 --max-interval 4.0 --extreme-floor-ratio 0.7 --priority-bias extremes --priority-bias-ratio 0.7",
-
-    "gen.py -np 20 -ns 5 -t 50.0",
-
-    # === Load & Density (Passengers Dominant) ===
-    # ID: HCE_MAX_LOAD
-    # OK (--hce): Maximize passengers under HuCe limit with a few SCHE. High density.
-    "gen.py -np 67 -ns 3 -t 40.0 --min-interval 0.0 --max-interval 0.3 --hce", # Total 70
-    # ID: PUB_HIGH_LOAD
-    # OK (non-hce): High passenger load, moderate SCHE spread out.
-    "gen.py -np 90 -ns 8 -t 80.0 --min-interval 0.5 --max-interval 1.0",
-    # ID: PUB_SPARSE_LONG
-    # OK (non-hce): Moderate P/S over very long duration.
-    "gen.py -np 30 -ns 10 -t 200.0 --min-interval 3.0 --max-interval 8.0",
-
-    # === Timing & Passenger Bursts ===
-    # ID: HCE_FORCE_START_MAX_SCHE
-    # OK (--hce): All passengers forced at start, max allowed SCHE spread later.
-    "gen.py -np 40 -ns 6 -t 50.0 --start-time 1.0 --force-start-passengers 40 --min-interval 6.0 --max-interval 8.0 --hce", # Total 46
-    # ID: HCE_FORCE_END_SCHE
-    # OK (--hce): All passengers forced at end, SCHE requests earlier.
-    "gen.py -np 30 -ns 5 -t 50.0 --start-time 1.0 --force-end-passengers 30 --max-time 49.9 --hce", # Total 35
-    # ID: PUB_BURST_EARLY_HIGH_SCHE
-    # OK (non-hce): Early passenger burst, high number of SCHE spread after.
-    "gen.py -np 30 -ns 18 -t 100.0 --start-time 5.0 --burst-size 30 --burst-time 5.1 --min-interval 4.0 --max-interval 6.0",
-    # ID: PUB_BURST_MID_HIGH_SCHE
-    # OK (non-hce): Mid-simulation burst during potential SCHE period (tests interaction). High SCHE count.
-    "gen.py -np 40 -ns 15 -t 80.0 --burst-size 35 --burst-time 40.0 --min-interval 1.0 --max-interval 5.0",
-    # ID: HCE_BURST_LATE
-    # OK (--hce): SCHE spread early, passenger burst very late within HuCe limits.
-    "gen.py -np 20 -ns 6 -t 50.0 --start-time 1.0 --burst-size 15 --burst-time 48.0 --hce", # Total 26
-    # ID: PUB_MULTI_BURST_SCHE
-    # OK (non-hce): Multiple passenger events (force start, burst, force end) interspersed with SCHE. Uses moderate SCHE count.
-    "gen.py -np 60 -ns 8 -t 90.0 --force-start-passengers 10 --burst-size 20 --burst-time 45.0 --force-end-passengers 10 --min-interval 1.0 --max-interval 6.0", # P=10+20+10 + 20 middle
-
-    # === Passenger Priority Focus ===
-    # ID: HCE_PRIO_EXTREME_MAX_SCHE
-    # OK (--hce): High extreme priority passenger load + Max allowed SCHE.
-    "gen.py -np 54 -ns 6 -t 40.0 --priority-bias extremes --priority-bias-ratio 0.9 --hce", # Total 60
-    # ID: PUB_PRIO_MIDDLE_HIGH_SCHE
-    # OK (non-hce): High middle priority passenger load + High SCHE count.
-    "gen.py -np 50 -ns 16 -t 100.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 10 --min-interval 1.0 --max-interval 5.0",
-
-    # === Passenger Floor Patterns ===
-    # ID: HCE_FLOOR_EXTREME_MAX_SCHE
-    # OK (--hce): High extreme floor passenger load + Max allowed SCHE.
-    "gen.py -np 44 -ns 6 -t 48.0 --extreme-floor-ratio 0.8 --hce", # Total 50
-    # ID: PUB_FLOOR_EXTREME_HIGH_SCHE
-    # OK (non-hce): High extreme floor passenger load + High SCHE count.
-    "gen.py -np 40 -ns 17 -t 120.0 --extreme-floor-ratio 0.7 --min-interval 2.0 --max-interval 6.0",
-
-    # === SCHE Focused Tests ===
-    # ID: HCE_SCHE_ONLY_MAX
-    # OK (--hce): SCHE ONLY, max allowed (6), spread within HuCe time.
-    "gen.py -np 1 -ns 6 -t 50.0 --start-time 1.0 --min-interval 7.0 --max-interval 8.0 --hce",
-    # ID: HCE_SCHE_ONLY_CLUSTERED
-    # OK (--hce): SCHE ONLY, max allowed (6), forced into shorter time span (intervals enforced by gen.py).
-    "gen.py -np 1 -ns 6 -t 40.0 --start-time 1.0 --max-time 40.0 --min-interval 0.1 --max-interval 1.0 --hce",
-    # ID: PUB_SCHE_ONLY_MAX
-    # OK (non-hce): SCHE ONLY, max public count (20), requires long duration for 6s interval.
-    "gen.py -np 1 -ns 20 -t 150.0 --start-time 1.0 --min-interval 6.0 --max-interval 7.0",
-    # ID: PUB_SCHE_ONLY_MAX_PRESSURE
-    # OK (non-hce): SCHE ONLY, max public count (20), shorter duration tests generator's time advancement.
-    "gen.py -np 1 -ns 20 -t 100.0 --start-time 1.0 --min-interval 0.5 --max-interval 3.0", # Generator will push times > 6s apart
-
-    # === Pressure Tests (Bursts during SCHE periods) ===
-    # ID: HCE_PRESSURE_BURST_MID_SCHE
-    # OK (--hce): Max SCHE spread, large passenger burst occurs mid-way.
-    "gen.py -np 40 -ns 6 -t 50.0 --start-time 1.0 --burst-size 35 --burst-time 25.0 --hce", # Total 46
-    # ID: PUB_PRESSURE_BURST_HIGH_SCHE
-    # OK (non-hce): High SCHE count spread, large passenger burst mid-way.
-    "gen.py -np 50 -ns 15 -t 100.0 --start-time 1.0 --min-interval 1.0 --max-interval 5.0 --burst-size 40 --burst-time 50.0",
-    # ID: HCE_PRESSURE_DENSE_P_MAX_SCHE
-    # OK (--hce): High density passengers throughout + Max SCHE requests.
-    "gen.py -np 64 -ns 6 -t 30.0 --max-time 30.0 --min-interval 0.0 --max-interval 0.3 --hce", # Total 70
-    # ID: PUB_PRESSURE_DENSE_P_HIGH_SCHE
-    # OK (non-hce): High density passengers throughout + High SCHE count.
-    "gen.py -np 70 -ns 18 -t 90.0 --min-interval 0.1 --max-interval 0.8",
-    # === Edge Combinations ===
-    # ID: HCE_EXTREME_ALL
-    # OK (--hce): Combines Prio/Floor extremes, burst, forced, max SCHE under HuCe limits.
-    "gen.py -np 50 -ns 6 -t 50.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 10 --burst-time 25.0 --priority-bias extremes --priority-bias-ratio 0.5 --extreme-floor-ratio 0.5 --hce", # Total 56
-    # ID: PUB_EXTREME_ALL_HIGH_SCHE
-    # OK (non-hce): Combines Prio/Floor extremes, burst, forced, high SCHE count.
-    "gen.py -np 40 -ns 19 -t 140.0 --force-start-passengers 5 --force-end-passengers 5 --burst-size 10 --burst-time 70.0 --priority-bias middle --priority-bias-ratio 0.4 --priority-middle-range 5 --extreme-floor-ratio 0.6 --min-interval 1.0 --max-interval 5.0", # P=5+5+10+20=40
-
-    "gen.py -np 30 -ns 5 -t 45.0 --min-interval 0.5 --max-interval 1.5 --hce",
-    # ID: PUB_BASELINE_MIX
-    # OK (non-hce): A standard public mix, moderate P/S, reasonable time.
-    "gen.py -np 40 -ns 8 -t 60.0 --min-interval 0.5 --max-interval 2.0",
-
-    # === High Load & Density (Focus: Many requests quickly) ===
-    # ID: HCE_MAX_LOAD_DENSE
-    # OK (--hce): Maximize total requests (70) under HuCe limit with high density. Tests handling near-limit scenarios.
-    "gen.py -np 64 -ns 6 -t 35.0 --min-interval 0.0 --max-interval 0.3 --hce",
-    # ID: PUB_HIGH_LOAD_DENSE
-    # OK (non-hce): High passenger load, moderate SCHE, high density over moderate time.
-    "gen.py -np 85 -ns 10 -t 70.0 --min-interval 0.1 --max-interval 0.8",
-    # ID: PUB_HIGH_SCHE_DENSE
-    # OK (non-hce): Moderate passenger load but high SCHE count with high density. Tests SCHE interval logic under pressure.
-    "gen.py -np 30 -ns 18 -t 80.0 --min-interval 0.2 --max-interval 1.0",
-
-    # === Timing & Bursts (Focus: Sudden load changes) ===
-    # ID: HCE_FORCE_START_MAX_SCHE
-    # OK (--hce): All passengers at start, max allowed SCHE spread later. Tests initial load handling + SCHE scheduling.
-    "gen.py -np 40 -ns 6 -t 40.0 --start-time 1.0 --force-start-passengers 40 --min-interval 5.0 --max-interval 7.0 --hce",
-    # ID: HCE_FORCE_END_MID_SCHE
-    # OK (--hce): SCHE requests distributed, all passengers appear exactly at the end time. Tests SCHE during operation and sudden late load.
-    "gen.py -np 30 -ns 5 -t 49.9 --start-time 1.0 --force-end-passengers 30 --max-time 49.9 --hce",
-    # ID: PUB_BURST_EARLY_HIGH_SCHE
-    # OK (non-hce): Early passenger burst, high number of SCHE spread afterwards.
-    "gen.py -np 40 -ns 18 -t 90.0 --start-time 5.0 --burst-size 40 --burst-time 5.1 --min-interval 3.0 --max-interval 5.0",
-    # ID: HCE_BURST_MID_MAX_SCHE
-    # OK (--hce): Max SCHE spread out, passenger burst occurs mid-way through their potential activity. Tests dynamic load changes.
-    "gen.py -np 34 -ns 6 -t 50.0 --start-time 1.0 --burst-size 30 --burst-time 25.0 --hce", # Total 40
-    # ID: PUB_MULTI_EVENT_HIGH_SCHE
-    # OK (non-hce): Multiple passenger events (force start, burst, force end) interspersed with many SCHE requests. Complex timeline.
-    "gen.py -np 60 -ns 15 -t 90.0 --force-start-passengers 10 --burst-size 25 --burst-time 45.0 --force-end-passengers 10 --min-interval 0.5 --max-interval 4.0", # P=10+25+10 + 15 middle
-
-    # === Passenger Priority Focus (Focus: Scheduling algorithm stress) ===
-    # ID: HCE_PRIO_EXTREME_MAX_SCHE
-    # OK (--hce): High load of extreme priority passengers + Max allowed SCHE. Tests priority handling under load.
-    "gen.py -np 54 -ns 6 -t 40.0 --priority-bias extremes --priority-bias-ratio 0.9 --hce",
-    # ID: PUB_PRIO_MIDDLE_HIGH_SCHE
-    # OK (non-hce): High load of middle priority passengers + High SCHE count. Different priority stress.
-    "gen.py -np 50 -ns 16 -t 80.0 --priority-bias middle --priority-bias-ratio 0.8 --priority-middle-range 10 --min-interval 0.5 --max-interval 4.0",
-    # ID: HCE_PRIO_MIX_DENSE
-    # OK (--hce): Mix of priority biases (extremes/middle/none) under dense conditions near HuCe limit.
-    "gen.py -np 60 -ns 5 -t 30.0 --priority-bias extremes --priority-bias-ratio 0.4 --priority-bias middle --priority-middle-range 15 --min-interval 0.1 --max-interval 0.5 --hce", # Note: only one bias can apply per passenger
-
-    # === Passenger Floor Patterns (Focus: Traffic flow patterns) ===
-    # ID: HCE_FLOOR_EXTREME_MAX_SCHE
-    # OK (--hce): High load of extreme floor (B4<->F7) passengers + Max allowed SCHE. Tests long-distance travel patterns.
-    "gen.py -np 44 -ns 6 -t 48.0 --extreme-floor-ratio 0.8 --hce",
-    # ID: PUB_FLOOR_EXTREME_HIGH_SCHE
-    # OK (non-hce): High load of extreme floor passengers + High SCHE count. Stressing long routes with SCHE interference.
-    "gen.py -np 40 -ns 17 -t 90.0 --extreme-floor-ratio 0.7 --min-interval 1.0 --max-interval 5.0",
-
-    # === SCHE Focused Tests (Focus: SCHE constraints and interaction) ===
-    # ID: HCE_SCHE_ONLY_MAX_CLUSTERED
-    # OK (--hce): SCHE ONLY, max allowed (6), forced into shorter time span. Tests generator's interval enforcement and elevator SCHE handling.
-    "gen.py -np 1 -ns 6 -t 40.0 --start-time 1.0 --max-time 40.0 --min-interval 0.1 --max-interval 1.0 --hce",
-    # ID: PUB_SCHE_ONLY_MAX_PRESSURE
-    # OK (non-hce): SCHE ONLY, max public count (20), relatively short duration forces generator's time advancement logic. Tests SCHE 6s rule implementation.
-    "gen.py -np 1 -ns 20 -t 90.0 --start-time 1.0 --min-interval 0.5 --max-interval 2.0", # Generator WILL push times > 6s apart
-    # === Pressure Tests (Focus: High contention, bursts during SCHE) ===
-    # ID: HCE_PRESSURE_BURST_DURING_SCHE
-    # OK (--hce): Max SCHE spread across the time, large passenger burst occurs right in the middle. High potential for interaction.
-    "gen.py -np 40 -ns 6 -t 50.0 --start-time 1.0 --burst-size 35 --burst-time 25.0 --hce",
-    # ID: PUB_PRESSURE_BURST_DURING_HIGH_SCHE
-    # OK (non-hce): High SCHE count spread out, large passenger burst occurs mid-way. Similar to HCE version but with more SCHE.
-    "gen.py -np 50 -ns 18 -t 80.0 --start-time 1.0 --min-interval 0.5 --max-interval 4.0 --burst-size 40 --burst-time 40.0",
-    # ID: HCE_PRESSURE_DENSE_P_MAX_SCHE
-    # OK (--hce): High density passengers throughout + Max SCHE requests, short timeframe. Maximum HuCe pressure.
-    "gen.py -np 64 -ns 6 -t 30.0 --max-time 30.0 --min-interval 0.0 --max-interval 0.3 --hce",
-    # ID: PUB_PRESSURE_DENSE_P_HIGH_SCHE
-    # OK (non-hce): High density passengers throughout + High SCHE count, moderate timeframe. Sustained pressure.
-    "gen.py -np 70 -ns 18 -t 70.0 --min-interval 0.1 --max-interval 0.6",
-
-    # === Balanced Tests (Focus: Mix of features without extremes) ===
-    # ID: HCE_BALANCED_MIX
-    # OK (--hce): Moderate P/S, mix of priority bias and a burst, reasonable density. Represents a typical complex scenario.
-    "gen.py -np 40 -ns 4 -t 60.0 --min-interval 0.5 --max-interval 2.0 --priority-bias middle --priority-bias-ratio 0.4 --burst-size 10 --burst-time 30.0 --hce",
-    # ID: PUB_BALANCED_MIX
-    # OK (non-hce): Moderate P/S, mix of floor pattern, priority bias, and burst. Public test equivalent of complex scenario.
-    "gen.py -np 50 -ns 8 -t 80.0 --min-interval 0.8 --max-interval 3.0 --extreme-floor-ratio 0.3 --priority-bias extremes --priority-bias-ratio 0.2 --burst-size 15 --burst-time 40.0",
-
-    # === Extreme Conditions (Focus: Pushing specific parameters to limits) ===
-    # ID: HCE_EXTREME_PRIO_FLOOR_MAX_SCHE
-    # OK (--hce): High P load, forcing *all* applicable passengers to extreme priority AND extreme floors, with max SCHE. Tests handling of combined extremes.
-    "gen.py -np 54 -ns 6 -t 45.0 --extreme-floor-ratio 1.0 --priority-bias extremes --priority-bias-ratio 1.0 --hce",
-    # ID: PUB_EXTREME_PRIO_FLOOR_HIGH_SCHE
-    # OK (non-hce): High P load, all extreme priority/floors, high SCHE count. Public test version of combined extremes.
-    "gen.py -np 50 -ns 15 -t 90.0 --extreme-floor-ratio 1.0 --priority-bias extremes --priority-bias-ratio 1.0 --min-interval 0.5 --max-interval 3.0",
-    # ID: HCE_EXTREME_TIME_CRUNCH_P_MAX_SCHE
-    # OK (--hce): Moderate passenger count forced into a *tiny* time window (effectively simultaneous) + max SCHE spread around it. Tests dispatcher's ability to handle sudden bulk requests.
-    "gen.py -np 30 -ns 6 -t 40.0 --start-time 15.0 --max-time 15.1 --force-start-passengers 30 --hce", # SCHE will be forced outside 15.0-15.1 due to intervals
-    # ID: PUB_EXTREME_TIME_CRUNCH_P_HIGH_SCHE
-    # OK (non-hce): High passenger count forced into tiny window + high SCHE count. Public test version of time crunch.
-    "gen.py -np 70 -ns 18 -t 80.0 --start-time 40.0 --max-time 40.2 --force-start-passengers 70", # SCHE will be forced outside 40.0-40.2
-]
-
 
 # Helper function for conditional debug printing
 def debug_print(*args, **kwargs):
@@ -363,6 +50,7 @@ class JarTester:
     _all_results_history = defaultdict(lambda: {'correct_runs': 0, 'total_runs': 0, 'scores': []})
     _gen_arg_presets = []
     _raw_preset_commands = []
+    _loaded_preset_commands = []
 
     # --- Locks for shared resources ---
     _history_lock = threading.Lock()
@@ -1381,12 +1069,16 @@ class JarTester:
         JarTester._gen_arg_presets = []
         JarTester._raw_preset_commands = []
         required_time_arg_present = True # Flag to check if all presets have time args
-        print("INFO: Parsing generator presets...") # User feedback
-        for cmd_index, cmd_str in enumerate(GEN_PRESET_COMMANDS):
+
+        if not JarTester._loaded_preset_commands: # 检查是否成功加载了命令
+            print("ERROR: No generator presets were loaded. Cannot initialize.", file=sys.stderr)
+            return False
+
+        for cmd_index, cmd_str in enumerate(JarTester._loaded_preset_commands):
             parts = cmd_str.split()
             if not parts or parts[0] != "gen.py":
-                 print(f"WARNING: Skipping invalid preset format (must start with 'gen.py'): {cmd_str}", file=sys.stderr)
-                 continue
+                print(f"WARNING: Skipping invalid preset format (must start with 'gen.py'): {cmd_str}", file=sys.stderr)
+                continue
 
             args_dict = {}
             has_time_arg = False # Check time arg per preset
@@ -1396,9 +1088,9 @@ class JarTester:
                 if not arg.startswith('-'):
                     # Simple check for misplaced values (often happens with copy-paste)
                     if i > 1 and parts[i-1].startswith('-'):
-                         print(f"WARNING: Argument '{parts[i-1]}' in preset '{cmd_str}' seems to be missing a value before '{arg}'. Assuming '{arg}' is a new argument.", file=sys.stderr)
+                        print(f"WARNING: Argument '{parts[i-1]}' in preset '{cmd_str}' seems to be missing a value before '{arg}'. Assuming '{arg}' is a new argument.", file=sys.stderr)
                     else:
-                         print(f"WARNING: Skipping invalid non-argument part in preset '{cmd_str}': {arg}", file=sys.stderr)
+                        print(f"WARNING: Skipping invalid non-argument part in preset '{cmd_str}': {arg}", file=sys.stderr)
                     i += 1
                     continue
 
@@ -1436,7 +1128,7 @@ class JarTester:
             # debug_print(f"Parsed preset {cmd_index}: '{preset_label}' -> {args_dict}")
 
         num_presets = len(JarTester._gen_arg_presets)
-        print(f"INFO: Initialized {num_presets} valid generator presets.")
+        print(f"INFO: Initialized/Parsed {num_presets} valid generator presets from the loaded list.") # 更新了打印信息
         if num_presets == 0:
             print("ERROR: No valid generator presets were parsed. Cannot continue.", file=sys.stderr)
             return False # Indicate failure
@@ -1731,18 +1423,18 @@ class JarTester:
             debug_print(f"Fatal error in _run_one_round {round_num}", exc_info=True)
             # Log the error (using the log lock)
             if JarTester._log_file_path:
-                 try:
-                     with JarTester._log_lock:
-                         with open(JarTester._log_file_path, "a", encoding="utf-8", errors='replace') as f:
-                             f.write(f"\n\n!!! FATAL WORKER ERROR (Round {round_num}) !!!\n")
-                             f.write(f"Thread: {thread_name}\n")
-                             f.write(f"Preset: {selected_preset_cmd}\n")
-                             f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                             f.write(f"Error: {e_round}\n")
-                             traceback.print_exc(file=f)
-                             f.write("\n")
-                 except Exception as e_log_fatal:
-                     print(f"ERROR [{thread_name}] Round {round_num}: Also failed to log fatal worker error: {e_log_fatal}", file=sys.stderr)
+                try:
+                    with JarTester._log_lock:
+                        with open(JarTester._log_file_path, "a", encoding="utf-8", errors='replace') as f:
+                            f.write(f"\n\n!!! FATAL WORKER ERROR (Round {round_num}) !!!\n")
+                            f.write(f"Thread: {thread_name}\n")
+                            f.write(f"Preset: {selected_preset_cmd}\n")
+                            f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            f.write(f"Error: {e_round}\n")
+                            traceback.print_exc(file=f)
+                            f.write("\n")
+                except Exception as e_log_fatal:
+                    print(f"ERROR [{thread_name}] Round {round_num}: Also failed to log fatal worker error: {e_log_fatal}", file=sys.stderr)
             # Clean up input file if it exists
             if input_data_path and os.path.exists(input_data_path):
                 if not CLEANUP_SUCCESSFUL_ROUNDS:
@@ -1754,15 +1446,92 @@ class JarTester:
 
     # --- Main test method modified for parallel rounds ---
     @staticmethod
-    def test(hw_n, jar_path, parallel_rounds, gen_args_override=None): # Added parallel_rounds
+    def test(): # Added parallel_rounds
         """Main testing entry point, runs multiple rounds in parallel."""
+        global ENABLE_DETAILED_DEBUG, LOG_DIR, TMP_DIR, CLEANUP_SUCCESSFUL_ROUNDS
         start_time_main = time.monotonic()
+        config = None
         try:
             # --- Initialization ---
-            hw_n_path = str(hw_n).replace(".", os.sep) # Use different var name
-            JarTester._jar_dir = jar_path
-            JarTester._gen_script_path = os.path.abspath(os.path.join(hw_n_path, "gen.py"))
-            JarTester._checker_script_path = os.path.abspath(os.path.join(hw_n_path, "checker.py"))
+            config_path = 'config.yml'
+            print(f"INFO: Loading configuration from {config_path}...")
+            if not os.path.exists(config_path):
+                print(f"ERROR: Configuration file '{config_path}' not found.", file=sys.stderr)
+                return
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            if not config:
+                print(f"ERROR: Configuration file '{config_path}' is empty or invalid.", file=sys.stderr)
+                return
+            hw_n = config.get('hw')
+            jar_base_dir = config.get('jar_base_dir')
+            logs_dir_config = config.get('logs_dir', 'logs') # Default if missing
+            tmp_dir_config = config.get('tmp_dir', 'tmp')     # Default if missing
+            test_config = config.get('test', {})
+            hce_filter_enabled = test_config.get('hce', False) # Default False if missing
+            parallel_rounds_config = test_config.get('parallel', DEFAULT_PARALLEL_ROUNDS) # Use default
+            debug_enabled_config = test_config.get('debug', False) # Default False
+            cleanup_enabled_config = test_config.get('cleanup', False) # Default False
+
+            if hw_n is None or not isinstance(hw_n, int):
+                print(f"ERROR: 'hw' value missing or invalid in {config_path}.", file=sys.stderr)
+                return
+            if not jar_base_dir or not isinstance(jar_base_dir, str):
+                print(f"ERROR: 'jar_base_dir' value missing or invalid in {config_path}.", file=sys.stderr)
+                return
+            if not isinstance(parallel_rounds_config, int) or parallel_rounds_config < 1:
+                print(f"WARNING: 'test.parallel' value invalid in {config_path}. Using default: {DEFAULT_PARALLEL_ROUNDS}.", file=sys.stderr)
+                parallel_rounds_config = DEFAULT_PARALLEL_ROUNDS
+
+            ENABLE_DETAILED_DEBUG = bool(debug_enabled_config)
+            LOG_DIR = logs_dir_config
+            TMP_DIR = tmp_dir_config
+            CLEANUP_SUCCESSFUL_ROUNDS = bool(cleanup_enabled_config)
+
+            # Update debug status immediately if changed
+            if ENABLE_DETAILED_DEBUG:
+                debug_print("Detailed debugging enabled via config.")
+            if CLEANUP_SUCCESSFUL_ROUNDS:
+                debug_print("Cleanup mode enabled via config.")
+
+            # Calculate hw_n_path based on hw_n
+            m = hw_n // 4 + 1
+            hw_n_str = os.path.join(f"unit_{m}", f"hw_{hw_n}")
+
+            JarTester._jar_dir = jar_base_dir
+            JarTester._gen_script_path = os.path.abspath(os.path.join(hw_n_str, "gen.py"))
+            JarTester._checker_script_path = os.path.abspath(os.path.join(hw_n_str, "checker.py"))
+
+            JarTester._loaded_preset_commands = [] # Reset before loading
+            gen_dir = os.path.dirname(JarTester._gen_script_path)
+            presets_yaml_path = os.path.abspath(os.path.join(gen_dir, "gen_presets.yml"))
+
+            try:
+                print(f"INFO: Loading generator presets from {presets_yaml_path}...")
+                if not os.path.exists(presets_yaml_path):
+                    print(f"ERROR: Generator presets file '{presets_yaml_path}' not found.", file=sys.stderr)
+                    return # Abort if presets are missing
+                with open(presets_yaml_path, 'r', encoding='utf-8') as f_presets:
+                    loaded_presets = yaml.safe_load(f_presets)
+
+                if not isinstance(loaded_presets, list):
+                    print(f"ERROR: Content of '{presets_yaml_path}' is not a valid YAML list.", file=sys.stderr)
+                    return # Abort if format is wrong
+                # Basic validation: ensure all items are strings
+                if not all(isinstance(item, str) for item in loaded_presets):
+                    print(f"ERROR: Not all items in '{presets_yaml_path}' are strings. Each preset must be a string.", file=sys.stderr)
+                    return # Abort if items aren't strings
+
+                JarTester._loaded_preset_commands = loaded_presets
+                print(f"INFO: Successfully loaded {len(JarTester._loaded_preset_commands)} generator presets.")
+
+            except yaml.YAMLError as e_yaml:
+                print(f"ERROR: Failed to parse generator presets file '{presets_yaml_path}': {e_yaml}", file=sys.stderr)
+                return # Abort on parse error
+            except Exception as e_load:
+                print(f"ERROR: Unexpected error loading generator presets file '{presets_yaml_path}': {e_load}", file=sys.stderr)
+                return # Abort on other errors
+
             JarTester._interrupted = False
             JarTester._round_counter = 0 # Reset counter
             JarTester._all_results_history.clear()
@@ -1773,15 +1542,30 @@ class JarTester:
             formatted_time = time.strftime("%Y-%m-%d-%H-%M-%S", local_time)
             JarTester._log_file_path = os.path.abspath(os.path.join(LOG_DIR, f"{formatted_time}_elevator_run.log"))
 
+            print(f"INFO: Homework target: {hw_n_str}")
+            print(f"INFO: JAR directory: {JarTester._jar_dir}")
             print(f"INFO: Logging round summaries and errors to {JarTester._log_file_path}")
-            print(f"INFO: Storing temporary input/output files in {os.path.abspath(TMP_DIR)}/")
-            print(f"INFO: Running up to {parallel_rounds} test rounds concurrently.")
+            print(f"INFO: Storing temporary input/output files in {os.path.abspath(TMP_DIR)}")
+            print(f"INFO: Running up to {parallel_rounds_config} test rounds concurrently.")
+
+            if hce_filter_enabled:
+                print("INFO: HCE filter enabled. Removing non-HCE presets...")
+                original_count = len(JarTester._loaded_preset_commands)
+                # Filter the global list directly before it's used by _initialize_presets
+                JarTester._loaded_preset_commands = [cmd for cmd in JarTester._loaded_preset_commands if "--hce" in cmd]
+                filtered_count = len(JarTester._loaded_preset_commands)
+                print(f"INFO: Filtered presets: {original_count} -> {filtered_count}")
+                if filtered_count == 0:
+                    print("ERROR: HCE filtering resulted in zero presets. Cannot continue.", file=sys.stderr)
+                    return
 
             if not os.path.exists(JarTester._gen_script_path): print(f"ERROR: Generator script not found: {JarTester._gen_script_path}", file=sys.stderr); return
             if not os.path.exists(JarTester._checker_script_path): print(f"ERROR: Checker script not found: {JarTester._checker_script_path}", file=sys.stderr); return
             if not JarTester._find_jar_files(): print("ERROR: No JAR files found or accessible. Aborting.", file=sys.stderr); return
 
-            if not JarTester._initialize_presets(): print("ERROR: Failed to initialize presets. Aborting.", file=sys.stderr); return
+            if not JarTester._initialize_presets():
+                print("ERROR: Failed to initialize/parse presets after loading. Aborting.", file=sys.stderr)
+                return
 
             signal.signal(signal.SIGINT, JarTester._signal_handler)
             print(f"Press Ctrl+C to stop testing gracefully after running rounds finish.")
@@ -1798,10 +1582,10 @@ class JarTester:
             max_rounds = None # Run indefinitely until Ctrl+C unless set
 
             # Outer ThreadPoolExecutor for managing rounds
-            with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_rounds, thread_name_prefix='RoundRunner') as round_executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_rounds_config, thread_name_prefix='RoundRunner') as round_executor:
                 while not JarTester._interrupted:
                     # Submit new rounds if below the parallel limit and not interrupted
-                    while len(active_futures) < parallel_rounds and not JarTester._interrupted:
+                    while len(active_futures) < parallel_rounds_config and not JarTester._interrupted:
                         round_num = JarTester._get_next_round_number()
                         debug_print(f"MainLoop: Submitting round {round_num}")
                         future = round_executor.submit(JarTester._run_one_round, round_num)
@@ -1914,48 +1698,3 @@ class JarTester:
 
             end_time_main = time.monotonic()
             print(f"\nTotal execution time: {end_time_main - start_time_main:.2f} seconds.")
-
-
-# --- Main Execution Block ---
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Elevator Concurrent Tester (Parallel Rounds)")
-    parser.add_argument("hw_n", help="Homework identifier (e.g., 'hw5'), directory containing gen.py and checker.py")
-    parser.add_argument("jar_path", help="Path to the directory containing student JAR files")
-    parser.add_argument("--parallel-rounds", type=int, default=DEFAULT_PARALLEL_ROUNDS,
-                        help=f"Number of test rounds to run concurrently (default: {DEFAULT_PARALLEL_ROUNDS})")
-    # Keep debug flag
-    parser.add_argument("--debug", action='store_true', help="Enable detailed debug output to stderr.")
-    parser.add_argument("--cleanup", action='store_true',
-                        help="Delete temporary input/output files for rounds where ALL JARs pass successfully.")
-
-    # Remove ignored generator args from parser if they truly do nothing now
-    # parser.add_argument("--gen-num-requests", type=int, help="[IGNORED] Use presets instead.")
-    # parser.add_argument("--gen-max-time", type=float, help="[IGNORED] Use presets instead.")
-
-    args = parser.parse_args()
-
-    if args.debug:
-        ENABLE_DETAILED_DEBUG = True
-        # Re-enable buffer flushing for debug if needed, although print(flush=True) is used
-        # sys.stdout.reconfigure(line_buffering=True)
-        # sys.stderr.reconfigure(line_buffering=True)
-        debug_print("Detailed debugging enabled.")
-
-    if args.cleanup:
-        CLEANUP_SUCCESSFUL_ROUNDS = True
-        debug_print("Cleanup mode enabled: Temp files for successful rounds will be deleted.")
-
-    if args.parallel_rounds < 1:
-        print("ERROR: --parallel-rounds must be at least 1.", file=sys.stderr)
-        sys.exit(1)
-
-    hw_dir = args.hw_n
-    jar_dir = args.jar_path
-
-    if not os.path.isdir(hw_dir): print(f"ERROR: Homework directory '{hw_dir}' not found.", file=sys.stderr); sys.exit(1)
-    if not os.path.isdir(jar_dir): print(f"ERROR: JAR directory '{jar_dir}' not found.", file=sys.stderr); sys.exit(1)
-
-    # Pass parallel_rounds count to the test method
-    JarTester.test(hw_dir, jar_dir, parallel_rounds=args.parallel_rounds, gen_args_override=None) # Pass None for gen_args
-
-# --- END OF FILE test.py ---
