@@ -647,98 +647,116 @@ def select_point(hack_dir, checker_path, generator_path, std_jar_path, num_gener
     print(f"ERROR: Failed to select a valid data point from '{hack_waiting_dir}' after {max_attempts} attempts.") # <--- 修改日志
     return None, None
 
-
-def std_send_point(locator: playwright.sync_api.Locator, text: str):
-    try:
-        locator.fill(text)
-    except Exception as e:
-        print(f"ERROR: Failed to fill text area: {e}")
-        raise # 重新抛出异常，让上层处理
-
-def send_point(page: playwright.sync_api.Page, hack_dir, checker_path, generator_path, std_jar_path, num_generate):
+def send_point(page: playwright.sync_api.Page, hack_dir, checker_path, generator_path, std_jar_path, num_generate, homework_id: int, target_alias_name: str):
     global PASSED, REJECTED, THISSTDIN
 
     hack_waiting_dir = os.path.join(hack_dir, "waiting")
     hack_passed_dir = os.path.join(hack_dir, "passed")
     hack_rejected_dir = os.path.join(hack_dir, "rejected")
 
-    print("\n--- Attempting to submit a hack ---")
-    enabled_buttons = page.locator('div[role="list"] button:not([disabled="disabled"])')
-    first_enabled_button = enabled_buttons.nth(0)
-    print("INFO: Clicking an enabled hack button.")
-    first_enabled_button.click()
+    print("\n--- Attempting to submit a hack via API ---")
 
-    # 等待提交对话框的文本区域出现
-    page.wait_for_selector("div.v-card__text div.v-input textarea", timeout=10000)
-    block = page.locator("div.v-card__text div.v-input textarea")
-    stdin_block = block.nth(0)
-    stdout_block = block.nth(1)
-
-    # --- 选择并验证数据点 ---
     stdin_content, stdout_content = select_point(hack_dir, checker_path, generator_path, std_jar_path, num_generate)
     if stdin_content is None or stdout_content is None:
         print("ERROR: Failed to select a valid stdin/stdout pair. Aborting submission attempt.")
-        # 需要关闭当前的提交对话框（如果已打开）
-        try:
-            cancel_button = page.locator('button:has-text("取消")').nth(0) # nth(0)不确定是否总是对
-            if cancel_button.is_visible(): cancel_button.click()
-        except Exception as cancel_err:
-            print(f"WARNING: Could not click cancel button after failing to select data: {cancel_err}")
-        return False, False # 返回表示提交未进行且未成功
-
-    print(f"INFO: Submitting data pair: {THISSTDIN}") # THISSTDIN 被 select_point 设置
-    std_send_point(stdin_block, stdin_content)
-    std_send_point(stdout_block, stdout_content)
-
-    # --- 点击提交 ---
-    submit_button = page.locator("button.primary--text span.v-btn__content").filter(has_text="提交").nth(0)
-    print("INFO: Clicking submit button.")
-    submit_button.click(timeout=5000)
-
-    # --- 处理提交结果 ---
-    cold = False
-
-    try:
-        card = page.locator("#app > div:nth-child(6) > div > div > div.v-card__title.py-1.pl-2.pr-1")
-        text = card.text_content(timeout=1000)
-        print(f"INFO: {text}")
-        if "错误" in text:
-            print(f"INFO: Moving data pair {THISSTDIN} to rejected directory due to submission failure/error.")
+        if THISSTDIN and THISSTDIN not in REJECTED and THISSTDIN not in PASSED:
+            print(f"INFO: Marking partially selected/failed {THISSTDIN} as rejected.")
             REJECTED.append(THISSTDIN)
             move_file_pair(THISSTDIN, hack_waiting_dir, hack_rejected_dir)
-            return False, False
-    except:
-        try:
-            snackbar = page.locator("#appSnackbar > div > div")
-            text = snackbar.text_content(timeout=1500)
-            print(f"INFO: {text}")
-            if "冷却期" in text:
-                cold = True
-                end = page.locator("button.primary--text span.v-btn__content").nth(0)
-                end.click(timeout=1000)
-        except:
-            cold = True
+        return False, False
 
-    if cold:
-        return True, False
-    
-    submitted = False
+    print(f"INFO: Selected data pair: {THISSTDIN}. Preparing API submission for target '{target_alias_name}'.")
+
+    api_url = f"http://api.oo.buaa.edu.cn/homework/{homework_id}/mutual_test/room/self/code/{target_alias_name}/submit_data"
+
+    payload = {
+        'stdin': stdin_content,
+        'stdout': stdout_content
+    }
+    api_timeout = 15000
+    is_cooldown = False
+    is_success = False
+
     try:
-        error = page.locator("#app > div:nth-child(6) > div > div > div.v-card__text.py-2")
-        page.locator("#app > div:nth-child(6) > div > div > div.v-card__title.py-1.pl-2.pr-1 > button > span > i").click(timeout=5000)
-        end = page.locator("button.primary--text span.v-btn__content").nth(0)
-        end.click()
-        print(f"INFO: Moving data pair {THISSTDIN} to rejected directory due to submission failure/error.")
-        REJECTED.append(THISSTDIN)
-        move_file_pair(THISSTDIN, hack_waiting_dir, hack_rejected_dir)
-        submitted = False
-    except:
-        print(f"INFO: Moving data pair {THISSTDIN} to passed directory.")
-        PASSED.append(THISSTDIN)
-        move_file_pair(THISSTDIN, hack_waiting_dir, hack_passed_dir)
-        print("COMMITED")
-        submitted = True
-    return False, submitted
+        print(f"INFO: Sending POST request to {api_url}")
+        response = page.request.post(
+            api_url,
+            data=payload,
+            timeout=api_timeout
+        )
+
+        print(f"INFO: API response status: {response.status}")
+
+        if not response.ok:
+            print(f"ERROR: API submission failed with HTTP status {response.status}: {response.status_text}")
+            try:
+                error_body = response.text()
+                print(f"Response body: {error_body}")
+                try:
+                    error_data = json.loads(error_body)
+                    api_message = error_data.get("message", "No message in error body.")
+                    print(f"API Error Message: {api_message}")
+                    if error_data.get("code") == 1617:
+                        print("INFO: Cooldown detected via API error response (code 1617).")
+                        is_cooldown = True
+                except json.JSONDecodeError:
+                    print("INFO: Error response body is not valid JSON.")
+            except Exception as text_err:
+                print(f"ERROR: Could not read response body after HTTP error: {text_err}")
+            is_success = False
+        else:
+            try:
+                response_data = response.json()
+                print(f"INFO: API Response JSON: {response_data}")
+
+                message = response_data.get("message", "No message provided.")
+                print(f"INFO: API Message: {message}")
+
+                if response_data.get("success") is True:
+                    print("INFO: API reported SUCCESSFUL submission.")
+                    is_success = True
+                else:
+                    print("INFO: API reported FAILED submission (success: false or missing).")
+                    is_success = False
+                    if response_data.get("code") == 1617:
+                        print("INFO: Cooldown detected via API response (code 1617).")
+                        is_cooldown = True
+
+            except json.JSONDecodeError as json_err:
+                print(f"ERROR: Failed to parse successful API response as JSON: {json_err}")
+                print(f"Raw response body: {response.text()}")
+                is_success = False
+            except Exception as parse_err:
+                print(f"ERROR: Unexpected error processing API JSON response: {parse_err}")
+                is_success = False
+
+    except playwright.sync_api.Error as api_err: # Catch Playwright network errors (timeout, connection refused etc.)
+        print(f"ERROR: Playwright API request failed: {api_err}")
+        is_success = False # Treat request error as failure
+    except Exception as e:
+        print(f"ERROR: Unexpected exception during API submission call: {e}")
+        import traceback
+        print(traceback.format_exc())
+        is_success = False # Treat unexpected errors as failure
+
+    if THISSTDIN: # Ensure THISSTDIN is set (it should be if select_point succeeded)
+        if is_success:
+            print(f"INFO: Moving data pair {THISSTDIN} to passed directory.")
+            PASSED.append(THISSTDIN)
+            move_file_pair(THISSTDIN, hack_waiting_dir, hack_passed_dir)
+            print("COMMITTED successfully via API")
+        elif is_cooldown:
+            # If the *reason* for failure was cooldown, leave the data in waiting
+            print(f"INFO: Submission blocked by cooldown (API code 1617). Data pair {THISSTDIN} remains in waiting directory.")
+        else:
+            # Any other failure reason -> move to rejected
+            print(f"INFO: Moving data pair {THISSTDIN} to rejected directory due to API submission failure (HTTP error, success:false, JSON error, etc.).")
+            REJECTED.append(THISSTDIN)
+            move_file_pair(THISSTDIN, hack_waiting_dir, hack_rejected_dir)
+    else:
+        print("WARNING: THISSTDIN was not set before file moving logic. This might indicate an issue in select_point.")
+    
+    return is_cooldown, is_success
 
 def get_course(page: playwright.sync_api.Page, config):
     print("INFO: Navigating to course page using API...")
@@ -982,13 +1000,21 @@ def main():
                                         if wait_seconds > 0:
                                             # 加一点缓冲时间，例如 2 秒
                                             sleep_time = wait_seconds + 2
-                                            print(f"INFO: Currently in cooldown. Last submit: {last_submit_str}, CD: {submit_cd}s. Calculated wait time: {wait_seconds:.2f}s. Sleeping for {sleep_time:.0f} seconds...")
-                                            time.sleep(sleep_time)
+                                            total_sleep_int = int(sleep_time) # 取整用于循环
+                                            print(f"INFO: Currently in cooldown. Last submit: {last_submit_str}, CD: {submit_cd}s. Calculated wait time: {wait_seconds:.2f}s. Sleeping for {total_sleep_int} seconds...")
+                                            last_msg_len = 0 # 用于清除上一条消息
+                                            for i in range(total_sleep_int, 0, -1):
+                                                progress_message = f"Cooldown remaining: {i:>{len(str(total_sleep_int))}} seconds... " # 右对齐秒数
+                                                # 清除上一行进度条 (打印足够多的空格再\r)
+                                                print(' ' * last_msg_len, end='\r') 
+                                                print(progress_message, end='\r', flush=True)
+                                                last_msg_len = len(progress_message)
+                                                time.sleep(1) # 每次休眠1秒
+                                            print(' ' * last_msg_len, end='\r', flush=True) 
                                             print("INFO: Cooldown finished. Reloading page...")
-                                            page.reload(wait_until="domcontentloaded") # 等待DOM加载完成
+                                            page.reload(wait_until="domcontentloaded")
                                         else:
                                             print("INFO: Cooldown period seems to have just ended according to API. Proceeding.")
-                                            # 可能需要刷新一下以确保状态更新
                                             page.reload(wait_until="domcontentloaded")
 
                                     except (ValueError, TypeError) as time_err:
@@ -1018,30 +1044,27 @@ def main():
                     break
                 else:
                     if target_alias_name is not None:
-                        print(f"INFO: No hack limit reached yet. A potential target alias is {target_alias_name} (currently unused).")
+                        print(f"INFO: No hack limit reached yet. Proceeding to hack target: {target_alias_name}")
                     else:
-                        print("INFO: No hack limit reached yet, and no specific target alias identified (or API error occurred).")
+                        print("ERROR: Cannot proceed without a target alias name from ready_to_break. Exiting.")
                         sys.exit(-1)
 
-                cold, submitted = send_point(page, hack_dir, checker_path, generator_path, std_jar_path, num_generate)
+                submission_was_blocked_by_cooldown, submission_succeeded = send_point(
+                    page, hack_dir, checker_path, generator_path, std_jar_path, num_generate,
+                    homework_id, target_alias_name
+                )
 
-                if cold:
-                    try:
-                        wait_text = page.locator("div.mb-1 > p").text_content()
-                        wait_match = re.search(r"(\d+)", wait_text)
-                        if wait_match:
-                            wait_seconds = int(wait_match.group(1)) + 1 # 加1秒缓冲
-                            print(f"INFO: Cooldown detected. Waiting for {wait_seconds} seconds...")
-                            time.sleep(wait_seconds)
-                    except (playwright.sync_api.TimeoutError, AttributeError, ValueError) as e:
-                        print(f"WARNING: Failed to get precise cooldown time ({e}). waiting for 1800s.")
-                        time.sleep(1800)
-                    print("INFO: Cooldown finished. Reloading page...")
-                    page.reload(wait_until="domcontentloaded") # 等待DOM加载完成
-
-                elif not submitted:
-                    current_data_msg = f"(Last attempted: {THISSTDIN})" if THISSTDIN else "(No data selected)"
-                    print(f"INFO: Submission attempt was not successful {current_data_msg}.")
+                if submission_succeeded:
+                    print(f"INFO: Submission successful for cycle {hack_attempts}.")
+                    # Successful submission might trigger cooldown, the check at the start
+                    # of the *next* loop should handle the wait.
+                elif submission_was_blocked_by_cooldown:
+                    print(f"INFO: Submission attempt failed due to cooldown detected by API (code 1617) for cycle {hack_attempts}.")
+                    print("INFO: Waiting before next cycle due to cooldown detection...")
+                else:
+                    # Submission failed for reasons other than cooldown
+                    current_data_msg = f"(Last attempted: {THISSTDIN})" if THISSTDIN else "(No data selected/available)"
+                    print(f"INFO: Submission attempt failed {current_data_msg} for cycle {hack_attempts}.")
 
                 # 打印当前状态
                 print(f"--- Status after cycle {hack_attempts} ---")
@@ -1056,9 +1079,17 @@ def main():
                     print("WARNING: Could not count files in directories.")
 
                 # 在每次循环后短暂暂停，避免过于频繁的操作
-                time.sleep(random.uniform(1, 3)) # 随机暂停1-3秒
-                print("INFO: Reloading page for next cycle...")
-                page.reload(wait_until="domcontentloaded")
+                print("INFO: Preparing for next cycle...")
+                # Add a small random delay before reload
+                sleep_duration = random.uniform(2, 5)
+                print(f"INFO: Pausing for {sleep_duration:.1f} seconds...")
+                time.sleep(sleep_duration)
+                try:
+                    print("INFO: Reloading page...")
+                    page.reload(wait_until="domcontentloaded") # Wait for page to be ready
+                    print("INFO: Page reloaded.")
+                except playwright.sync_api.Error as reload_err:
+                    print(f"ERROR: Failed to reload page: {reload_err}. Attempting to continue...")
 
             print("--- Hack script finished ---")
 
