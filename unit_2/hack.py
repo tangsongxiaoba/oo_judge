@@ -308,7 +308,7 @@ def generate_missing_out_files_parallel(hack_waiting_dir, hack_rejected_dir, std
     print(f"Successfully generated: {successful_generations}")
     print(f"Failed/Moved to rejected: {failed_generations}")
 
-def choose_existed_one(hack_waiting_dir, hack_rejected_dir, checker_path):
+def choose_existed_one(hack_waiting_dir, hack_rejected_dir, checker_path, std_jar_path):
     global REJECTED, PASSED, THISSTDIN
     try:
         all_in_files = [f for f in os.listdir(hack_waiting_dir) if f.endswith(".in")]
@@ -330,18 +330,50 @@ def choose_existed_one(hack_waiting_dir, hack_rejected_dir, checker_path):
         stdout_path = os.path.join(hack_waiting_dir, stdout_name)
 
         if not os.path.exists(stdout_path):
-            print(f"WARNING: Skipping '{base_name}': Paired stdout file '{stdout_name}' not found in '{hack_waiting_dir}' (should have been generated?). Moving to rejected.")
-            REJECTED.append(base_name)
-            # 只移动 .in 文件
-            in_src = os.path.join(hack_waiting_dir, stdin_name)
-            in_dst = os.path.join(hack_rejected_dir, stdout_name.replace(".out", ".in")) # 确保目标是 .in
-            os.makedirs(hack_rejected_dir, exist_ok=True)
-            if os.path.exists(in_src):
+            print(f"INFO: Stdout file '{stdout_name}' not found for '{stdin_name}'. Attempting to generate it using std_jar...")
+
+            generated_stdout_content = run_std_jar(std_jar_path, stdin_path) # run_std_jar 已包含超时处理
+
+            if generated_stdout_content is None:
+                # run_std_jar 失败 (超时、Java 错误等)
+                print(f"ERROR: Failed to generate stdout for '{stdin_name}' using std_jar. Moving '{stdin_name}' to rejected.")
+                REJECTED.append(base_name)
+                # 只移动 .in 文件
+                in_src = os.path.join(hack_waiting_dir, stdin_name)
+                in_dst = os.path.join(hack_rejected_dir, stdin_name) # 直接用 .in 文件名
+                os.makedirs(hack_rejected_dir, exist_ok=True)
+                if os.path.exists(in_src):
+                    try:
+                        shutil.move(in_src, in_dst)
+                    except Exception as e:
+                        print(f"ERROR: Failed to move '{in_src}' to rejected after generation failure: {e}")
+                continue # 尝试下一个 base_name
+
+            else:
+                # run_std_jar 成功，尝试写入 .out 文件
                 try:
-                    shutil.move(in_src, in_dst)
-                except Exception as e:
-                    print(f"ERROR: Failed to move orphan '{in_src}' to rejected: {e}")
-            continue # 尝试下一个
+                    with open(stdout_path, "w", encoding="utf-8") as f_out:
+                        f_out.write(generated_stdout_content)
+                    print(f"INFO: Successfully generated and saved '{stdout_name}'. Proceeding with checker validation.")
+                    # 文件已生成，让代码自然流到下面的 checker 验证部分
+                    # *** 不要 continue ***
+                except IOError as e:
+                    print(f"ERROR: Failed to write generated stdout to '{stdout_path}': {e}. Moving '{stdin_name}' to rejected.")
+                    REJECTED.append(base_name)
+                    # 只移动 .in 文件
+                    in_src = os.path.join(hack_waiting_dir, stdin_name)
+                    in_dst = os.path.join(hack_rejected_dir, stdin_name)
+                    os.makedirs(hack_rejected_dir, exist_ok=True)
+                    if os.path.exists(in_src):
+                        try:
+                            shutil.move(in_src, in_dst)
+                        except Exception as move_e:
+                            print(f"ERROR: Failed to move '{in_src}' to rejected after write failure: {move_e}")
+                    # 清理可能创建的不完整 .out 文件 (可选，但最好加上)
+                    if os.path.exists(stdout_path):
+                        try: os.remove(stdout_path)
+                        except OSError as remove_e: print(f"WARNING: Could not remove partially written file '{stdout_path}': {remove_e}")
+                    continue # 尝试下一个 base_name
         
         isPass = False # 默认检查不通过
         checker_errors = []
@@ -349,7 +381,13 @@ def choose_existed_one(hack_waiting_dir, hack_rejected_dir, checker_path):
         if not os.path.exists(stdout_path):
             print(f"INTERNAL ERROR: stdout file '{stdout_path}' should exist at this point but doesn't. Skipping {base_name}.")
             REJECTED.append(base_name)
-            move_file_pair(base_name, hack_waiting_dir, hack_rejected_dir) # 尝试移动以防万一
+            # 尝试移动 .in 文件
+            in_src = os.path.join(hack_waiting_dir, stdin_name)
+            in_dst = os.path.join(hack_rejected_dir, stdin_name)
+            os.makedirs(hack_rejected_dir, exist_ok=True)
+            if os.path.exists(in_src):
+                try: shutil.move(in_src, in_dst)
+                except Exception as e: print(f"ERROR: Failed to move '{in_src}' to rejected after internal error: {e}")
             continue
 
         print(f"INFO: Checking data pair: {base_name}.in / .out from waiting dir.")
@@ -599,7 +637,7 @@ def generate_random_ones(std_jar_path, generator_path, hack_dir, num_generate):
         import traceback
         print(traceback.format_exc())
 
-def select_point(hack_dir, checker_path):
+def select_point(hack_dir, checker_path, std_jar_path):
     hack_waiting_dir = os.path.join(hack_dir, "waiting")
     hack_rejected_dir = os.path.join(hack_dir, "rejected")
 
@@ -608,7 +646,7 @@ def select_point(hack_dir, checker_path):
 
     print(f"\n--- Selecting data point from '{hack_waiting_dir}' (Single Attempt) ---")
 
-    stdin_content, stdout_content = choose_existed_one(hack_waiting_dir, hack_rejected_dir, checker_path)
+    stdin_content, stdout_content = choose_existed_one(hack_waiting_dir, hack_rejected_dir, checker_path, std_jar_path)
     if stdin_content is not None and stdout_content is not None:
         print(f"INFO: Successfully selected data pair '{THISSTDIN}' from waiting directory.")
         return stdin_content, stdout_content
@@ -1116,7 +1154,7 @@ def main():
                         print("ERROR: Cannot proceed without a target alias name from ready_to_break. Exiting.")
                         sys.exit(-1)
 
-                stdin_content, stdout_content = select_point(hack_dir, checker_path)
+                stdin_content, stdout_content = select_point(hack_dir, checker_path, std_jar_path)
 
                 if stdin_content is None or stdout_content is None:
                     print(f"INFO: Failed to select a valid data point in cycle {hack_attempts}. Skipping submission and proceeding to next cycle.")
