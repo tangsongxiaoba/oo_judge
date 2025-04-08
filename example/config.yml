@@ -1,13 +1,13 @@
 hw: 6
-class_path: assets/elevator2_unofficial.jar
+assets_dir: assets
+class_path: elevator2_unofficial.jar
 stu_id: 23066666 # 学号
 stu_pwd: 'password' # 密码
 jar_base_dir: jar
 logs_dir: logs
 tmp_dir: tmp
 hacker:
-  std_jar_name: std.jar # 标准输出jar包的文件名
-  waiting_dir: hack/waiting
+  std_jar_name: hw_6.jar               # 标准输出jar包的文件名
   checker_name: checker.py             # checker脚本的文件名
   generator_name: gen.py               # generator脚本的文件名
   hack_dir: hack                       # hack数据存放目录 (用于存放stdin/stdout)
