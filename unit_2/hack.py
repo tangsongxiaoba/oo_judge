@@ -599,73 +599,39 @@ def generate_random_ones(std_jar_path, generator_path, hack_dir, num_generate):
         import traceback
         print(traceback.format_exc())
 
-def select_point(hack_dir, checker_path, generator_path, std_jar_path, num_generate):
+def select_point(hack_dir, checker_path):
     hack_waiting_dir = os.path.join(hack_dir, "waiting")
     hack_rejected_dir = os.path.join(hack_dir, "rejected")
-    hack_passed_dir = os.path.join(hack_dir, "passed")
 
     os.makedirs(hack_waiting_dir, exist_ok=True)
     os.makedirs(hack_rejected_dir, exist_ok=True)
-    os.makedirs(hack_passed_dir, exist_ok=True)
 
-    try:
-        generate_missing_out_files_parallel(hack_waiting_dir, hack_rejected_dir, std_jar_path)
-    except Exception as e:
-        print(f"ERROR: Unexpected error during parallel generation of missing .out files: {e}")
-        # 根据情况决定是否继续，这里选择继续尝试选择，可能有些文件生成失败了
-        import traceback
-        print(traceback.format_exc())
+    print(f"\n--- Selecting data point from '{hack_waiting_dir}' (Single Attempt) ---")
 
-    max_attempts = 5 # 防止无限循环
-    for attempt in range(max_attempts):
-        print(f"\n--- Selecting data point from '{hack_waiting_dir}' (Attempt {attempt + 1}/{max_attempts}) ---")
-        try:
-            stdins = [f for f in os.listdir(hack_waiting_dir) if f.endswith(".in")]
-        except FileNotFoundError:
-            stdins = []
+    stdin_content, stdout_content = choose_existed_one(hack_waiting_dir, hack_rejected_dir, checker_path)
+    if stdin_content is not None and stdout_content is not None:
+        print(f"INFO: Successfully selected data pair '{THISSTDIN}' from waiting directory.")
+        return stdin_content, stdout_content
+    else:
+        # choose_existed_one 未能在当前 waiting 目录中找到有效且可用的数据点
+        print(f"INFO: No valid and available data pair found in '{hack_waiting_dir}' during this selection attempt.") # <--- 修改日志
+        return None, None # 返回 None, None 表示失败
 
-        available_bases = [s.replace(".in", "") for s in stdins if s.replace(".in", "") not in REJECTED and s.replace(".in", "") not in PASSED]
-        if not available_bases:
-            print(f"INFO: No available data found in '{hack_waiting_dir}' after checking lists and generating missing .out. Generating new random ones...")
-            try:
-                # generate_random_ones 会写入 waiting 目录
-                generate_random_ones(std_jar_path, generator_path, hack_dir, num_generate)
-                # 调用后，下一次循环开始时会再次运行 generate_missing_out_files_parallel 处理可能生成的孤立 .in 文件
-            except Exception as e:
-                print(f"ERROR: Failed to generate random data during selection: {e}")
-
-        # 从当前有效的文件列表中选择并验证
-        stdin_content, stdout_content = choose_existed_one(hack_waiting_dir, hack_rejected_dir, checker_path)
-
-        if stdin_content is not None and stdout_content is not None:
-            # 成功选择并验证了一个
-            return stdin_content, stdout_content
-        else:
-            print("INFO: Failed to select/validate a pair in this attempt from waiting dir, trying again...") # <--- 修改日志
-            time.sleep(0.5)
-
-    print(f"ERROR: Failed to select a valid data point from '{hack_waiting_dir}' after {max_attempts} attempts.") # <--- 修改日志
-    return None, None
-
-def send_point(page: playwright.sync_api.Page, hack_dir, checker_path, generator_path, std_jar_path, num_generate, homework_id: int, target_alias_name: str):
+def send_point(page: playwright.sync_api.Page, homework_id: int, target_alias_name: str, stdin_content: str, stdout_content: str, hack_dir: str):
     global PASSED, REJECTED, THISSTDIN
 
     hack_waiting_dir = os.path.join(hack_dir, "waiting")
     hack_passed_dir = os.path.join(hack_dir, "passed")
     hack_rejected_dir = os.path.join(hack_dir, "rejected")
 
-    print("\n--- Attempting to submit a hack via API ---")
+    print("\n--- Attempting to submit the selected hack via API ---")
 
-    stdin_content, stdout_content = select_point(hack_dir, checker_path, generator_path, std_jar_path, num_generate)
-    if stdin_content is None or stdout_content is None:
-        print("ERROR: Failed to select a valid stdin/stdout pair. Aborting submission attempt.")
-        if THISSTDIN and THISSTDIN not in REJECTED and THISSTDIN not in PASSED:
-            print(f"INFO: Marking partially selected/failed {THISSTDIN} as rejected.")
-            REJECTED.append(THISSTDIN)
-            move_file_pair(THISSTDIN, hack_waiting_dir, hack_rejected_dir)
+    if not THISSTDIN:
+        print("CRITICAL ERROR: THISSTDIN is not set before calling send_point. Cannot determine which file to move later.")
+        # 最好在这里做个防护，虽然理论上 main 的逻辑保证了这一点
         return False, False
 
-    print(f"INFO: Selected data pair: {THISSTDIN}. Preparing API submission for target '{target_alias_name}'.")
+    print(f"INFO: Using selected data pair: {THISSTDIN}. Preparing API submission for target '{target_alias_name}'.")
 
     api_url = f"http://api.oo.buaa.edu.cn/homework/{homework_id}/mutual_test/room/self/code/{target_alias_name}/submit_data"
 
@@ -938,7 +904,7 @@ def sync_lists_and_ensure_waiting_data(hack_dir, std_jar_path, generator_path, n
     hack_passed_dir = os.path.join(hack_dir, "passed")
     hack_rejected_dir = os.path.join(hack_dir, "rejected")
 
-    print("\n--- Synchronizing PASSED/REJECTED lists with directories ---")
+    print("\n--- Synchronizing PASSED/REJECTED lists and ensuring data availability ---")
 
     # 确保目录存在 (虽然 main 里也做了，但这里再确认下无妨)
     os.makedirs(hack_waiting_dir, exist_ok=True)
@@ -963,6 +929,15 @@ def sync_lists_and_ensure_waiting_data(hack_dir, std_jar_path, generator_path, n
         print(f"WARNING: Rejected directory '{hack_rejected_dir}' not found during sync.")
         REJECTED[:] = [] # 如果目录不存在，清空列表
 
+    print("INFO: Attempting to generate any missing .out files in waiting directory...")
+    try:
+        generate_missing_out_files_parallel(hack_waiting_dir, hack_rejected_dir, std_jar_path)
+    except Exception as e:
+        print(f"ERROR: Unexpected error during parallel generation of missing .out files: {e}")
+        # 即使生成失败，也继续尝试检查和生成新的
+        import traceback
+        print(traceback.format_exc())
+
     # 检查 waiting 目录中是否有可用的数据点
     try:
         waiting_files = [f for f in os.listdir(hack_waiting_dir) if f.endswith(".in")]
@@ -978,15 +953,10 @@ def sync_lists_and_ensure_waiting_data(hack_dir, std_jar_path, generator_path, n
             try:
                 # 调用现有的生成函数
                 generate_random_ones(std_jar_path, generator_path, hack_dir, num_generate)
-                # 注意: generate_random_ones 内部会生成 .in 和 .out 文件到 waiting 目录
-                # select_point 稍后会处理可能遗漏的 .out 或验证失败的情况
             except Exception as e:
                 print(f"ERROR: Failed to generate random data when waiting directory was empty: {e}")
                 import traceback
                 print(traceback.format_exc())
-                # 即使生成失败，也继续尝试（可能之前生成的文件只是被移走了）
-        # else: # 如果有可用数据，则不需要生成
-            # print(f"INFO: Sufficient available data found in '{hack_waiting_dir}'. Skipping generation.")
 
     except FileNotFoundError:
         print(f"WARNING: Waiting directory '{hack_waiting_dir}' not found. Attempting to generate new data...")
@@ -997,7 +967,7 @@ def sync_lists_and_ensure_waiting_data(hack_dir, std_jar_path, generator_path, n
             import traceback
             print(traceback.format_exc())
 
-    print("--- Synchronization and data check complete ---")
+    print("--- Synchronization and data availability check complete ---")
 
 def handle_cooldown(page: playwright.sync_api.Page, homework_id: int):
     """
@@ -1146,9 +1116,31 @@ def main():
                         print("ERROR: Cannot proceed without a target alias name from ready_to_break. Exiting.")
                         sys.exit(-1)
 
+                stdin_content, stdout_content = select_point(hack_dir, checker_path)
+
+                if stdin_content is None or stdout_content is None:
+                    print(f"INFO: Failed to select a valid data point in cycle {hack_attempts}. Skipping submission and proceeding to next cycle.")
+                    # 短暂休眠一下，避免在没有数据时快速空转
+                    sleep_duration = random.uniform(3, 6)
+                    print(f"INFO: Pausing for {sleep_duration:.1f} seconds before next cycle...")
+                    time.sleep(sleep_duration)
+                    # 重新加载页面可能不是必须的，但如果担心页面状态过时可以加上
+                    try:
+                        print("INFO: Reloading page before next cycle attempt...")
+                        page.reload(wait_until="domcontentloaded")
+                        print("INFO: Page reloaded.")
+                    except Exception as reload_err:
+                         print(f"WARNING: Failed to reload page before next cycle: {reload_err}")
+                    continue # 跳到下一个循环开始，sync 会重新运行
+
+                print(f"INFO: Data point '{THISSTDIN}' selected. Attempting submission to target '{target_alias_name}'.")
                 submission_was_blocked_by_cooldown, submission_succeeded = send_point(
-                    page, hack_dir, checker_path, generator_path, std_jar_path, num_generate,
-                    homework_id, target_alias_name
+                    page,                   # playwright 页面对象
+                    homework_id,            # 作业 ID
+                    target_alias_name,      # 目标 alias
+                    stdin_content,          # <--- 传入选择好的 stdin
+                    stdout_content,         # <--- 传入选择好的 stdout
+                    hack_dir                # <--- 传入 hack 目录路径
                 )
 
                 if submission_succeeded:
