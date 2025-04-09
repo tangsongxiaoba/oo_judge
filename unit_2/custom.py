@@ -30,6 +30,7 @@ LOG_DIR = "logs" # Define log directory constant
 TMP_DIR = "tmp"  # Define temporary file directory constant
 DEFAULT_INPUT_FILE = "stdin.txt" # Default input file name
 MAX_OUTPUT_LOG_LINES = 100 # Limit stderr lines in log
+IGNORE_NON_TIMESTAMP_LINES = True
 
 # Helper function for conditional debug printing
 def debug_print(*args, **kwargs):
@@ -47,7 +48,7 @@ class CustomTester:
     _input_file_path: str = "" # Store path to the user-provided input file
     _interrupted: bool = False # Global interrupt flag
     _log_file_path: Optional[str] = None
-    # _run_results_history is removed as we now aggregate results after all iterations
+    IGNORE = IGNORE_NON_TIMESTAMP_LINES
 
     # --- Locks for shared resources ---
     # History lock removed as history is no longer aggregated incrementally
@@ -563,12 +564,36 @@ class CustomTester:
             checker_details: str = ""
             checker_stdout: str = ""
             checker_stderr: str = ""
+
+            # --- Filter stdout content before passing to checker if IGNORE is True ---
+            content_for_checker = stdout_content # Default to original content
+            if CustomTester.IGNORE:
+                debug_print(f"Filtering non-timestamp lines from stdout for {jar_basename} before checking (IGNORE=True)")
+                original_line_count = len(stdout_content.splitlines())
+                # Regex to match lines starting with "[ timestamp ]"
+                # Allows optional whitespace and float timestamps
+                timestamp_pattern = re.compile(r"^\s*\[\s*\d+(?:\.\d*)?\s*\].*") # Match the whole line pattern
+                filtered_lines = [line for line in stdout_content.splitlines() if timestamp_pattern.match(line)]
+                # Join lines back with newline characters
+                content_for_checker = "\n".join(filtered_lines)
+                # Add a trailing newline if there were any filtered lines (common practice)
+                if filtered_lines:
+                    content_for_checker += "\n"
+                filtered_line_count = len(filtered_lines)
+                debug_print(f"Filtered {original_line_count} lines down to {filtered_line_count} lines for checker.")
+                if original_line_count > 0 and filtered_line_count == 0:
+                    debug_print(f"WARNING: Filtering removed all lines from {jar_basename} output.")
+            else:
+                debug_print(f"Passing original stdout to checker for {jar_basename} (IGNORE=False)")
+            # --- End Filtering Step ---
+
             try:
                 # Create temp file in TMP_DIR
+                os.makedirs(TMP_DIR, exist_ok=True)
                 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".txt", prefix=f"chk_{pid}_", encoding='utf-8', dir=TMP_DIR, errors='replace') as tf:
-                    tf.write(stdout_content)
+                    tf.write(content_for_checker)
                     temp_output_file = tf.name
-                debug_print(f"Checker using temp output file: {temp_output_file}")
+                debug_print(f"Checker using temp output file: {temp_output_file} (Content was {'filtered' if CustomTester.IGNORE else 'original'})")
 
                 # Use original_input_file_path for checker's first arg
                 debug_print(f"Checker using input(orig) '{original_input_file_path}' and output(jar) '{temp_output_file}' with Tmax={current_wall_limit:.2f}s")
