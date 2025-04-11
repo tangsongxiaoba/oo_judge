@@ -1,6 +1,6 @@
-hw: 6
+hw: 7
 assets_dir: assets
-class_path: elevator2_unofficial.jar
+class_path: elevator3.jar
 stu_id: 23066666 # 学号
 stu_pwd: 'password' # 密码
 jar_base_dir: jar
@@ -19,7 +19,7 @@ update:
   log_suffix: .log
   target_line_prefix: 'Input Data File Path:'
 test:
-  hce: True
+  hce: False
   parallel: 16
   debug: False
   cleanup: True

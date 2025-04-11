@@ -1,0 +1,58 @@
+- gen.py -np 40 -ns 8 -t 60.0 --min-interval 0.5 --max-interval 2.0
+- gen.py --hce -np 30 -ns 5 -t 45.0 --min-interval 0.5 --max-interval 1.5
+- gen.py --hce -np 64 -ns 6 -t 35.0 --min-interval 0.0 --max-interval 0.3
+- gen.py -np 85 -ns 10 -t 70.0 --min-interval 0.1 --max-interval 0.8
+- gen.py --hce -np 34 -ns 6 -t 50.0 --start-time 1.0 --burst-size 30 --burst-time 25.0
+- gen.py -np 60 -ns 15 -t 90.0 --force-start-passengers 10 --burst-size 25 --burst-time 45.0 --force-end-passengers 10 --min-interval 0.5 --max-interval 4.0
+- gen.py --hce -np 54 -ns 6 -t 40.0 --priority-bias extremes --priority-bias-ratio 0.9
+- gen.py -np 40 -ns 17 -t 90.0 --extreme-floor-ratio 0.7 --min-interval 1.0 --max-interval 5.0
+- gen.py --hce -np 1 -ns 6 -t 40.0 --start-time 1.0 --max-time 40.0 --min-interval 0.1 --max-interval 1.0
+- gen.py -np 1 -ns 20 -t 90.0 --start-time 1.0 --min-interval 0.5 --max-interval 2.0
+- gen.py --hce -np 64 -ns 6 -t 30.0 --max-time 30.0 --min-interval 0.0 --max-interval 0.3
+- gen.py -np 50 -ns 8 -t 80.0 --min-interval 0.8 --max-interval 3.0 --extreme-floor-ratio 0.3 --priority-bias extremes --priority-bias-ratio 0.2 --burst-size 15 --burst-time 40.0
+- gen.py --hce -np 20 -ns 2 -nu 1 -t 45.0 --update-time-limit-ratio 0.7
+- gen.py -np 30 -ns 4 -nu 1 -t 60.0 --update-time-limit-ratio 0.7
+- gen.py --hce -np 10 -ns 1 -nu 3 -t 50.0 --update-time-limit-ratio 0.95
+- gen.py -np 20 -ns 2 -nu 3 -t 70.0 --update-time-limit-ratio 0.9
+- gen.py --hce -np 40 -ns 3 -nu 3 -t 50.0 --min-interval 0.5 --max-interval 1.5 --update-time-limit-ratio 0.9
+- gen.py -np 50 -ns 5 -nu 3 -t 80.0 --min-interval 0.5 --max-interval 2.0 --update-time-limit-ratio 0.85
+- gen.py --hce -np 5 -ns 0 -nu 3 -t 50.0 --update-time-limit-ratio 0.75gen.py -np 70 -ns 0 -nu 3 -t 90.0 --min-interval 0.1 --max-interval 1.0 --update-time-limit-ratio 0.6
+- gen.py --hce -np 30 -ns 3 -nu 2 -t 50.0 --min-interval 0.5 --max-interval 2.0 --update-time-limit-ratio 0.8
+- gen.py -np 40 -ns 12 -nu 3 -t 130.0 --min-interval 0.5 --max-interval 3.0 --update-time-limit-ratio 0.8
+- gen.py --hce -np 10 -ns 5 -nu 3 -t 50.0 --max-time 30.0 --update-time-limit-ratio 0.95
+- gen.py -np 30 -ns 8 -nu 2 -t 90.0 --update-time-limit-ratio 0.9
+- gen.py --hce -np 45 -ns 2 -nu 2 -t 50.0 --min-interval 0.5 --max-interval 1.5 --update-time-limit-ratio 0.6
+- gen.py -np 60 -ns 4 -nu 2 -t 80.0 --burst-size 40 --burst-time 40.0 --update-time-limit-ratio 0.8
+- gen.py --hce -np 40 -ns 1 -nu 3 -t 50.0 --extreme-floor-ratio 0.7 --update-time-limit-ratio 0.5
+- gen.py -np 70 -ns 5 -nu 3 -t 100.0 --extreme-floor-ratio 0.6 --update-time-limit-ratio 0.1
+- gen.py --hce -np 61 -ns 3 -nu 3 -t 45.0 --min-interval 0.0 --max-interval 0.5 --update-time-limit-ratio 0.6
+- gen.py -np 60 -ns 15 -nu 3 -t 160.0 --min-interval 0.2 --max-interval 1.5 --update-time-limit-ratio 0.85
+- gen.py -np 80 -ns 0 -nu 3 -t 90.0 --burst-size 60 --burst-time 30.0 --extreme-floor-ratio 0.9 --update-time-limit-ratio 0.3
+- gen.py -np 80 -ns 12 -nu 3 -t 90.0 --burst-size 60 --burst-time 30.0 --extreme-floor-ratio 0.9 --update-time-limit-ratio 1
+- gen.py -np 80 -ns 10 -nu 3 -t 90.0 --burst-size 60 --burst-time 30.0 --extreme-floor-ratio 0.9 --update-time-limit-ratio 1
+- gen.py -np 80 -ns 18 -nu 3 -t 90.0 --burst-size 60 --burst-time 50.0 --extreme-floor-ratio 0.9 --update-time-limit-ratio 1
+- gen.py -np 70 -ns 0 -nu 3 -t 90.0 --burst-size 70 --burst-time 1.0 --extreme-floor-ratio 0.9 --update-time-limit-ratio 1
+- gen.py --hce -np 50 -ns 4 -nu 2 -t 40.0 --min-interval 0.1 --max-interval 0.6 --burst-size 10 --burst-time 25.0 --update-time-limit-ratio 0.6
+- gen.py --hce -np 10 -ns 3 -nu 3 -t 40.0 --start-time 1.0 --update-time-limit-ratio 0.01
+- gen.py --hce -np 10 -ns 3 -nu 3 -t 50.0 --start-time 1.0 --update-time-limit-ratio 0.99
+- gen.py -np 5 -ns 12 -nu 0 -t 80.0
+- gen.py --hce -np 20 -ns 3 -nu 3 -t 45.0 --min-interval 0.1 --max-interval 0.5 --update-time-limit-ratio 0.5
+- gen.py -np 10 -ns 10 -nu 3 -t 50.0 --update-time-limit-ratio 0.1
+- gen.py --hce -np 64 -ns 0 -nu 3 -t 50.0 --update-time-limit-ratio 0.05 --extreme-floor-ratio 1.0 --burst-size 50 --burst-time 10.0 --min-interval 0.0 --max-interval 0.1
+- gen.py -np 100 -ns 0 -nu 3 -t 90.0 --update-time-limit-ratio 0.1 --extreme-floor-ratio 1.0 --burst-size 80 --burst-time 20.0 --min-interval 0.0 --max-interval 0.1
+- gen.py --hce -np 64 -ns 0 -nu 3 -t 50.0 --update-time-limit-ratio 0.95 --extreme-floor-ratio 0.9 --priority-bias extremes --priority-bias-ratio 1.0 --burst-size 50 --burst-time 49.0 --min-interval 0.0 --max-interval 0.1
+- gen.py --hce -np 10 -ns 0 -nu 3 -t 30.0
+- gen.py -np 20 -ns 0 -nu 3 -t 80.0 --start-time 1.0 --max-interval 1.0 --update-time-limit-ratio 0.6
+- gen.py --hce -np 64 -ns 6 -nu 0 -t 50.0 --burst-size 50 --burst-time 20.0 --min-interval 0.0 --max-interval 0.1
+- gen.py -np 10 -ns 15 -nu 0 -t 70.0
+- gen.py -np 10 -ns 15 -nu 0 -t 70.0
+- gen.py --hce -np 1 -ns 6 -nu 0 -t 40.0
+- gen.py --hce -np 61 -ns 3 -nu 3 -t 50.0 --update-time-limit-ratio 0.9 --burst-size 10 --burst-time 49.5
+- gen.py --hce -np 64 -ns 3 -nu 3 -t 50.0 --update-time-limit-ratio 0.9 --burst-size 10 --burst-time 49.5
+- gen.py --hce -np 30 -ns 3 -nu 3 -t 50.0 --force-end-passengers 10 --update-time-limit-ratio 0.9
+- gen.py --hce -np 30 -ns 3 -nu 3 -t 40.0 --start-time 1.0 --force-start-passengers 10 --update-time-limit-ratio 0.01
+- gen.py --hce -np 10 -ns 6 -nu 3 -t 50.0 --start-time 1.0 --update-time-limit-ratio 0.5
+- gen.py --hce -np 10 -ns 3 -nu 3 -t 50.0 --start-time 1.0 --update-time-limit-ratio 0.5
+- gen.py --hce -np 50 -ns 3 -nu 2 -t 50.0 --start-time 1.0 --update-time-limit-ratio 0.2 --burst-size 30 --burst-time 15.0 --min-interval 0.1 --max-interval 0.5
+- gen.py -np 80 -ns 10 -nu 3 -t 120.0 --min-interval 0.2 --max-interval 1.0 --update-time-limit-ratio 0.6 --extreme-floor-ratio 0.5
+- gen.py --hce -np 10 -ns 3 -nu 3 -t 50.0 --start-time 1.0 --burst-size 5 --burst-time 5.0 --update-time-limit-ratio 0.7
