@@ -1,0 +1,24 @@
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.6 --phases build:1500,query:1500 --min_qts 500
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --phases build:1000,query:2000 --qci_focus far --min_qci 1000
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.5 --phases build:1500,query:1500 --min_qba 500
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.3 --tag_focus 0.7 --max_tag_size 200 --phases build:500,modify:1500,query:1000 --min_qtav 500
+- gen.py --hce -n 3000 --max_person_id 99 --rel_id_limit 10 --phases build:200,modify:2800 --mr_delete_ratio 0.6
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --phases build:500,query:2500 --min_qci 500 --min_qts 100 --min_qtav 500 --min_qba 500
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.7 --max_degree 15
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.01 --phases build:1500,query:1500 --min_qci 500 --min_qba 500
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.1 --tag_focus 0.8 --phases build:500,modify:2500
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.3 --phases build:1000,modify:2000 --mr_delete_ratio 0.05
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --tag_focus 0.4 --phases build:800,modify:1000,query:1200 --min_qci 300 --min_qtav 300 --min_qba 300
+- gen.py --hce -n 3000 --max_person_id 99 --density 0.15 --phases build:200,query:300,build:500,query:500,build:700,query:800
+- gen.py -n 10000 --max_person_id 2500 --density 0.005 --phases build:7000,query:3000 --min_qci 500 --min_qba 500 
+- gen.py -n 10000 --max_person_id 350 --density 0.8 --phases build:7000,query:3000 --min_qts 800             
+- gen.py -n 10000 --max_person_id 400 --density 0.6 --phases build:6000,query:4000 --min_qba 1500           
+- gen.py -n 10000 --max_person_id 600 --density 0.15 --tag_focus 0.8 --max_tag_size 750 --phases build:1500,modify:5500,query:3000 --min_qtav 1000
+- gen.py -n 10000 --max_person_id 500 --rel_id_limit 25 --phases build:300,modify:9700 --mr_delete_ratio 0.6
+- gen.py -n 10000 --max_person_id 700 --density 0.1 --phases build:2000,query:8000 --min_qci 1500 --min_qts 200 --min_qtav 1500 --min_qba 1500
+- gen.py -n 10000 --max_person_id 1000 --density 0.02 --phases build:5000,query:5000 --qci_focus far --min_qci 2000
+- gen.py -n 10000 --max_person_id 4000 --density 0.001 --phases build:8000,query:2000 --min_qci 500 --min_qba 500
+- gen.py -n 10000 --max_person_id 200 --density 0.95 --phases build:5000,query:5000 --min_qts 1500
+- gen.py -n 10000 --max_person_id 800 --density 0.1 --tag_focus 0.9 --max_tag_size 950 --phases build:1000,modify:6000,query:3000 --min_qtav 2000
+- gen.py -n 10000 --max_person_id 1000 --rel_id_limit 5 --phases build:50,modify:9950 --mr_delete_ratio 0.8
+- gen.py -n 10000 --max_person_id 500 --density 0.4 --tag_focus 0.5 --phases build:1000,query:1000,modify:1000,build:1000,query:1000,modify:1000,build:1000,query:1000,modify:1000,query:1000
