@@ -1,6 +1,6 @@
-hw: 7
+hw: 9
 assets_dir: assets
-class_path: elevator3_unofficial.jar
+class_path: hw_9.jar
 stu_id: 23066666 # 学号
 stu_pwd: 'password' # 密码
 jar_base_dir: jar
