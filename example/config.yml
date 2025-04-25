@@ -1,6 +1,6 @@
 hw: 9
 assets_dir: assets
-class_path: hw_9.jar
+class_path: hw9_official.jar
 stu_id: 23066666 # 学号
 stu_pwd: 'password' # 密码
 jar_base_dir: jar
