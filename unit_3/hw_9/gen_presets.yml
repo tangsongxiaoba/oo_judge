@@ -2,7 +2,7 @@
 - gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --phases build:1000,query:2000 --qci_focus far --min_qci 1000
 - gen.py --hce -n 3000 --max_person_id 99 --density 0.5 --phases build:1500,query:1500 --min_qba 500
 - gen.py --hce -n 3000 --max_person_id 99 --density 0.3 --tag_focus 0.7 --max_tag_size 200 --phases build:500,modify:1500,query:1000 --min_qtav 500
-- gen.py --hce -n 3000 --max_person_id 99 --rel_id_limit 10 --phases build:200,modify:2800 --mr_delete_ratio 0.6
+- gen.py --hce -n 3000 --max_person_id 99 --phases build:200,modify:2800 --mr_delete_ratio 0.6
 - gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --phases build:500,query:2500 --min_qci 500 --min_qts 100 --min_qtav 500 --min_qba 500
 - gen.py --hce -n 3000 --max_person_id 99 --density 0.7 --max_degree 15
 - gen.py --hce -n 3000 --max_person_id 99 --density 0.01 --phases build:1500,query:1500 --min_qci 500 --min_qba 500
@@ -14,11 +14,28 @@
 - gen.py -n 10000 --max_person_id 350 --density 0.8 --phases build:7000,query:3000 --min_qts 800             
 - gen.py -n 10000 --max_person_id 400 --density 0.6 --phases build:6000,query:4000 --min_qba 1500           
 - gen.py -n 10000 --max_person_id 600 --density 0.15 --tag_focus 0.8 --max_tag_size 750 --phases build:1500,modify:5500,query:3000 --min_qtav 1000
-- gen.py -n 10000 --max_person_id 500 --rel_id_limit 25 --phases build:300,modify:9700 --mr_delete_ratio 0.6
+- gen.py -n 10000 --max_person_id 500 --phases build:300,modify:9700 --mr_delete_ratio 0.6
 - gen.py -n 10000 --max_person_id 700 --density 0.1 --phases build:2000,query:8000 --min_qci 1500 --min_qts 200 --min_qtav 1500 --min_qba 1500
 - gen.py -n 10000 --max_person_id 1000 --density 0.02 --phases build:5000,query:5000 --qci_focus far --min_qci 2000
 - gen.py -n 10000 --max_person_id 4000 --density 0.001 --phases build:8000,query:2000 --min_qci 500 --min_qba 500
 - gen.py -n 10000 --max_person_id 200 --density 0.95 --phases build:5000,query:5000 --min_qts 1500
 - gen.py -n 10000 --max_person_id 800 --density 0.1 --tag_focus 0.9 --max_tag_size 950 --phases build:1000,modify:6000,query:3000 --min_qtav 2000
-- gen.py -n 10000 --max_person_id 1000 --rel_id_limit 5 --phases build:50,modify:9950 --mr_delete_ratio 0.8
+- gen.py -n 10000 --max_person_id 1000 --phases build:50,modify:9950 --mr_delete_ratio 0.8
 - gen.py -n 10000 --max_person_id 500 --density 0.4 --tag_focus 0.5 --phases build:1000,query:1000,modify:1000,build:1000,query:1000,modify:1000,build:1000,query:1000,modify:1000,query:1000
+- gen.py -n 10000 --max_person_id 5000 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.9 --phases build:9000,query:1000 --min_qci 50 --min_qba 50 --exception_ratio 0.3
+- gen.py -n 10000 --max_person_id 300 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.9 --phases build:8000,query:2000 --min_qts 1500 --exception_ratio 0.05
+- gen.py -n 10000 --max_person_id 500 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.9 --max_tag_id 1000 --tag_focus 0.8 --phases build:1000,modify:8000,query:1000 --min_qtav 500 --exception_ratio 0.1
+- gen.py -n 10000 --max_person_id 500 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.9 --max_tag_id 100 --max_tag_size 100 --tag_focus 0.8 --phases build:1000,modify:8000,query:1000 --min_qtav 300 --exception_ratio 0.1
+- gen.py -n 10000 --max_person_id 400 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.95 --tag_focus 0.5 --max_tag_size 50 --phases build:2000,modify:4000,query:4000 --exception_ratio 0.4 --force_qba_empty_ratio 0.1 --force_qtav_empty_ratio 0.1
+- gen.py -n 10000 --max_person_id 1000 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.8 --tag_focus 0.5 --phases build:2000,query:8000 --min_qci 2000 --min_qts 500 --min_qtav 2000 --min_qba 2000 --exception_ratio 0.05
+- gen.py -n 10000 --max_person_id 350 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.7 --phases build:5000,query:5000 --min_qts 1000 --min_qci 500 --min_qba 500 --min_qtav 500 --exception_ratio 0.05
+- gen.py -n 10000 --max_person_id 1000 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.7 --max_tag_id 500 --max_tag_size 200 --tag_focus 0.7 --phases build:1500,modify:5000,query:3500 --min_qtav 2000 --min_qci 500 --exception_ratio 0.1
+- gen.py -n 10000 --max_person_id 1100 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.7 --hub_bias 0.9 --num_hubs 1 --phases build:5000,modify:4500,query:500 --tag_focus 0.8 --max_tag_size 1000 --min_qtav 100 --exception_ratio 0.05
+- gen.py -n 10000 --max_person_id 500 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.2 --phases build:3000,modify_tags:3000,modify_rels:3000,query:1000 --tag_focus 0.7 --mr_delete_ratio 0.6 --min_qtav 500 --exception_ratio 0.15
+- gen.py -n 10000 --max_person_id 400 --max_rel_value 200 --max_age 200 --max_mod_value 50 --density 0.4 --phases build:7000,query:3000 --min_qba 1500 --exception_ratio 0.02
+- gen.py -n 10000 --max_person_id 600 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.1 --phases build:2000,churn:6000,query:2000 --tag_focus 0.8 --force_qtav_empty_ratio 0.2 --min_qtav 1000 --exception_ratio 0.1
+- gen.py -n 10000 --max_person_id 500 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.15 --phases build:3000,modify_tags:4000,query:3000 --tag_focus 0.7 --min_qtav 500 --exception_ratio 0.2
+- gen.py -n 10000 --max_person_id 400 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.3 --tag_focus 0.6 --mr_delete_ratio 0.5 --phases build:1000,churn:8000,query:1000 --exception_ratio 0.5 --force_qba_empty_ratio 0.15 --force_qtav_empty_ratio 0.15
+- gen.py -n 10000 --max_person_id 1200 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.4 --hub_bias 0.98 --num_hubs 1 --max_tag_id 0 --max_tag_size 1000 --phases build_hub_rels:4500,setup_hub_tag:10,fill_hub_tag:5000,test_limit:490 --tag_focus 0.95 --min_qtav 20 --exception_ratio 0.1
+- gen.py -n 10000 --max_person_id 1150 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.5 --hub_bias 0.95 --num_hubs 1 --max_tag_id 0 --max_tag_size 1000 --phases build_hub_rels:2500,setup_hub_tag:5,fill_hub_tag:7000,test_limit:495 --tag_focus 0.98 --min_qtav 10 --exception_ratio 0.15
+- gen.py -n 10000 --max_person_id 1200 --max_rel_value 200 --max_age 200 --max_mod_value 200 --density 0.4 --hub_bias 0.98 --num_hubs 1 --max_tag_id 0 --max_tag_size 1000 --phases build_hub_rels:4000,setup_hub_tag:10,fill_and_query:5000,test_limit:990 --tag_focus 0.8 --min_qtav 500 --exception_ratio 0.1
