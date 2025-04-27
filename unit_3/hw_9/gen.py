@@ -21,7 +21,12 @@ person_degrees = defaultdict(int) # {person_id: degree, ...}
 # --- Helper Functions ---
 
 def generate_name(person_id):
-    return f"Name_{person_id}"
+    # 保证生成的 name 长度不超过 100
+    base_name = f"Name_{person_id}"
+    if len(base_name) > 100:
+        # 理论上对于 int 范围内的 id 几乎不可能超过，但为了安全加上
+        return f"N_{person_id}"[:100]
+    return base_name
 
 def get_eligible_persons(id_limit=None, require_degree_greater_than=None):
     eligible = persons.copy()
@@ -334,16 +339,30 @@ def get_command_weights(phase="default", tag_focus=0.3):
         "churn": {**base_weights, "ap": 5, "ar": 15, "mr": 25, "at": 10, "dt": 15, "att": 10, "dft": 15,
                   "qv": 3, "qci": 3, "qts": 1, "qtav": 3, "qba": 2}, # Slightly increased query weights
         # Default: Balanced mix with reasonable query presence
-        "default": base_weights # Uses the updated base_weights
+        "default": base_weights, # Uses the updated base_weights
+
+        # 支持预设中使用的自定义阶段名称，映射到现有逻辑阶段
+        "build_hub_rels": {**base_weights, "ap": 10, "ar": 30, "mr": 2, "at": 2, "att": 2, # 偏重加人和加关系
+                         "qv": 1, "qci": 1, "qts": 1, "qtav": 1, "qba": 1, "dt": 1, "dft": 1},
+        "setup_hub_tag": {**base_weights, "ap": 1, "ar": 1, "at": 20, "att": 5}, # 偏重加tag
+        "fill_hub_tag": {**base_weights, "ap": 2, "ar": 5, "at": 5, "att": 30, "dft": 5}, # 偏重向tag加人
+        "fill_and_query": {**base_weights, "ap": 2, "ar": 5, "at": 5, "att": 15, "dft": 3, # 混合加tag成员和查询
+                           "qv": 10, "qci": 10, "qts": 5, "qtav": 15, "qba": 10},
+        "test_limit": {**base_weights, "ap": 0, "ar": 0, "mr": 0, "at": 0, "dt": 0, "att": 5, "dft": 5, # 主要测试边界，少量修改tag
+                       "qv": 10, "qci": 10, "qts": 10, "qtav": 10, "qba": 10},
+        "modify_tags": {**base_weights, "ap": 1, "ar": 1, "mr": 2, "at": 15, "dt": 15, "att": 25, "dft": 25, # 侧重 tag 修改
+                        "qv": 3, "qci": 3, "qts": 1, "qtav": 5, "qba": 2},
+        "modify_rels": {**base_weights, "ap": 1, "ar": 5, "mr": 30, "at": 2, "dt": 2, "att": 3, "dft": 3, # 侧重 relation 修改
+                        "qv": 5, "qci": 5, "qts": 1, "qtav": 3, "qba": 3},
     }
-    current_weights = phase_weights.get(phase, base_weights).copy()
+    current_weights = phase_weights.get(phase, phase_weights['default']).copy()
 
     # Adjust for tag_focus (same logic as before)
     tag_cmds = {"at", "dt", "att", "dft", "qtav"}
     total_weight = sum(current_weights.values())
-    if total_weight > 0:
+    if total_weight > 0 and tag_focus is not None:
         current_tag_weight = sum(w for cmd, w in current_weights.items() if cmd in tag_cmds)
-        current_tag_ratio = current_tag_weight / total_weight
+        current_tag_ratio = current_tag_weight / total_weight if total_weight else 0
 
         # Prevent division by zero if 1-current_tag_ratio is 0 (i.e., all weight is on tags)
         non_tag_denominator = (1 - current_tag_ratio)
@@ -607,7 +626,8 @@ def generate_commands(num_commands_target, max_person_id, max_tag_id, max_rel_va
                       density, degree_focus, max_degree, tag_focus, max_tag_size, qci_focus,
                       mr_delete_ratio, exception_ratio, force_qba_empty_ratio, force_qtav_empty_ratio,
                       hub_bias, num_hubs,
-                      phases_config):
+                      phases_config,
+                      hce_active):
 
     generated_cmds_list = []
     cmd_counts = defaultdict(int)
@@ -778,21 +798,38 @@ def generate_commands(num_commands_target, max_person_id, max_tag_id, max_rel_va
                     if p1 is not None: # Found a relation to modify
                         rel_key = (p1, p2)
                         current_value = relation_values.get(rel_key, 0)
-                        
+
                         # Decide modification value (m_val)
                         m_val = 0
+                        # NOTE: max_mod_value used here is the one passed to the function,
+                        # which should be capped by HCE logic *before* calling generate_commands.
                         if current_value > 0 and random.random() < mr_delete_ratio:
                             # Target deletion
-                            m_val = -current_value - random.randint(0, 10) # Ensure <= 0
+                            m_val = -current_value - random.randint(0, 10)
                         else:
                             # Random modification
-                            m_val = random.randint(-max_mod_value, max_mod_value)
+                            effective_max_mod = max(1, max_mod_value) # Ensure range is valid even if max_mod_value is 0
+                            m_val = random.randint(-effective_max_mod, effective_max_mod)
                             if m_val == 0 and max_mod_value != 0: # Avoid zero modification unless necessary
-                                m_val = random.choice([-1, 1]) * random.randint(1, max(1, max_mod_value))
+                                m_val = random.choice([-1, 1]) * random.randint(1, effective_max_mod)
+
+
+                        # --- START OF HCE CLAMPING FOR m_val ---
+                        if hce_active:
+                            hce_limit = 200
+                            original_m_val = m_val # For potential debugging
+                            m_val = max(-hce_limit, min(hce_limit, m_val))
+                            # Optional: Print if clamping happened
+                            # if m_val != original_m_val:
+                            #    print(f"DEBUG: HCE Clamped mr m_val from {original_m_val} to {m_val}", file=sys.stderr)
+                        # --- END OF HCE CLAMPING FOR m_val ---
+
 
                         cmd = f"mr {p1} {p2} {m_val}"
                         generated_successfully = True
+
                         # State update (remove or modify value) handled AFTER generating command string
+                        # IMPORTANT: Use the *potentially clamped* m_val for state update
                         new_value = current_value + m_val
                         if new_value <= 0:
                             remove_relation_state(p1, p2) # Handles degree and tag updates
@@ -966,14 +1003,17 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--num_commands", type=int, default=2000, help="Target number of commands (ignored if --phases is set).")
     parser.add_argument("--max_person_id", type=int, default=150, help="Maximum person ID (0 to max).")
     parser.add_argument("--max_tag_id", type=int, default=15, help="Maximum tag ID per person (0 to max).")
-    parser.add_argument("--max_age", type=int, default=99, help="Maximum person age.")
+    # 确保默认值符合规范 (<= 200)
+    parser.add_argument("--max_age", type=int, default=200, help="Maximum person age (default 200).")
     parser.add_argument("-o", "--output_file", type=str, default=None, help="Output file name (default: stdout).")
-    parser.add_argument("--hce", action='store_true', help="Enable HCE constraints (n<=3000, max_person_id<=99).")
+    # HCE flag 现在明确对应互测限制
+    parser.add_argument("--hce", action='store_true', help="Enable HCE constraints (apply Mutual Test limits: N<=3000, max_person_id<=99, values<=200).")
     parser.add_argument("--seed", type=int, default=None, help="Seed for the random number generator.")
 
     # Relation/Value Controls
-    parser.add_argument("--max_rel_value", type=int, default=200, help="Maximum initial relation value.")
-    parser.add_argument("--max_mod_value", type=int, default=200, help="Maximum absolute modify relation value change.")
+    # 确保默认值符合规范 (<= 200)
+    parser.add_argument("--max_rel_value", type=int, default=200, help="Maximum initial relation value (default 200).")
+    parser.add_argument("--max_mod_value", type=int, default=200, help="Maximum absolute modify relation value change (default 200).")
     parser.add_argument("--mr_delete_ratio", type=float, default=0.15, help="Approx. ratio of 'mr' commands targeting relation deletion (0.0-1.0).")
 
     # Graph Structure Controls
@@ -1016,28 +1056,54 @@ if __name__ == "__main__":
 
     # --- Apply HCE Constraints ---
     if args.hce:
-        print("INFO: HCE mode enabled. Adjusting parameters...", file=sys.stderr)
+        print("INFO: HCE mode enabled. Applying Mutual Test limits...", file=sys.stderr)
         hce_max_n = 3000
         hce_max_pid = 99
-        if not args.phases:
-             if args.num_commands > hce_max_n:
-                 print(f"  num_commands capped from {args.num_commands} to {hce_max_n}", file=sys.stderr)
-                 args.num_commands = hce_max_n
+        # 强制限制指令数
+        if args.phases:
+            try:
+                _, total_phase_commands = parse_phases(args.phases)
+                if total_phase_commands > hce_max_n:
+                    print(f"  Phase command total ({total_phase_commands}) exceeds HCE limit ({hce_max_n}). Capping total generated commands.", file=sys.stderr)
+                    # 直接限制总生成数，而不是修改 phase 配置
+                    args.num_commands = hce_max_n
+                else:
+                    args.num_commands = total_phase_commands # 正常使用 phase 总数
+            except ValueError:
+                 # 错误处理已在下面 validate phases 部分完成
+                 pass # parse_phases will raise error later if invalid
+        else:
+            if args.num_commands > hce_max_n:
+                print(f"  num_commands capped from {args.num_commands} to {hce_max_n}", file=sys.stderr)
+                args.num_commands = hce_max_n
+
+        # 强制限制 max_person_id
         if args.max_person_id > hce_max_pid:
             print(f"  max_person_id capped from {args.max_person_id} to {hce_max_pid}", file=sys.stderr)
             args.max_person_id = hce_max_pid
-        # HCE also implies smaller n for load_network, which affects scale
-        # We don't explicitly handle ln's n limit here, but keep max_person_id low.
+
+        # 强制限制其他数值参数
+        hce_max_value = 200
+        if args.max_age > hce_max_value:
+            print(f"  max_age capped from {args.max_age} to {hce_max_value}", file=sys.stderr)
+            args.max_age = hce_max_value
+        if args.max_rel_value > hce_max_value:
+            print(f"  max_rel_value capped from {args.max_rel_value} to {hce_max_value}", file=sys.stderr)
+            args.max_rel_value = hce_max_value
+        if args.max_mod_value > hce_max_value:
+             print(f"  max_mod_value capped from {args.max_mod_value} to {hce_max_value}", file=sys.stderr)
+             args.max_mod_value = hce_max_value
+        if abs(args.max_mod_value) > hce_max_value: # Also check negative if relevant (it's not currently for this param)
+             pass # Not needed as it's checked against positive cap
 
     # --- Validate Phases ---
     phases_config = None
     if args.phases:
         try:
             phases_config, total_phase_commands = parse_phases(args.phases)
-            if args.hce and total_phase_commands > hce_max_n:
-                 print(f"WARNING: Total commands in --phases ({total_phase_commands}) exceeds HCE limit ({hce_max_n}). Generator might stop early.", file=sys.stderr)
-                 # Cap the phase counts proportionally? Or just let it run and warn. Let's warn for now.
-            args.num_commands = total_phase_commands # Use phase total as the target
+            # 如果 HCE 生效，num_commands 已被上面的逻辑覆盖/限制
+            if not args.hce: # 如果不是 HCE，则使用 phase 总数
+                 args.num_commands = total_phase_commands
         except ValueError as e:
             print(f"ERROR: Invalid --phases argument: {e}", file=sys.stderr)
             sys.exit(1)
@@ -1061,17 +1127,20 @@ if __name__ == "__main__":
         person_tags.clear(); tag_members.clear(); person_details.clear()
         person_degrees.clear()
 
+        # 注意: generate_commands 函数内部现在使用 args.num_commands 作为循环上限
+        # 这个值可能被 HCE 或 --phases 逻辑修改过
         all_commands, final_cmd_counts = generate_commands(
             args.num_commands, args.max_person_id, args.max_tag_id,
             args.max_rel_value, args.max_mod_value, args.max_age,
-            None, # args.rel_id_limit - removed based on discussion
+            None, # rel_id_limit removed
             args.min_qci, args.min_qts, args.min_qtav, args.min_qba,
             args.density, args.degree_focus, args.max_degree,
             args.tag_focus, args.max_tag_size, args.qci_focus,
             args.mr_delete_ratio, args.exception_ratio,
             args.force_qba_empty_ratio, args.force_qtav_empty_ratio,
             args.hub_bias, args.num_hubs,
-            phases_config
+            phases_config,
+            args.hce # <--- 传递 HCE 状态
         )
 
         # Print all generated commands
