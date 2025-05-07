@@ -110,6 +110,10 @@
 # Focus: Frequent account/article creation/deletion within HCE limits.
 - gen.py --hce -n 3000 --max_person_id 99 --max_account_id 35 --max_article_id 1000 --account_focus 0.7 --phases build:500,churn:2000,query:500 --exception_ratio 0.3 --min_qbc 80 --min_qra 80
 
+# Test Case Q-QTVS-HCE-MUTUAL: Stress qtvs within typical HCE mutual test constraints.
+# N=3000, max_person_id=99. Max tag size will be limited by max_person_id.
+- gen.py --hce -n 3000 --max_person_id 99 --max_rel_value 180 --density 0.3 --tag_focus 0.8 --account_focus 0.02 --max_tag_id 5 --max_tag_size 80 --hub_bias 0.7 --num_hubs 1 --phases build_hub_rels:800,setup_hub_tag:5,fill_hub_tag:1000,query_qtvs_heavy:1195 --min_qtvs 300 --exception_ratio 0.04
+
 # --- Non-HCE Presets (符合公测限制: N<=10000, val<=200) ---
 
 # Test Case 9: Large Scale Account/Article Churn (Public)
@@ -211,3 +215,31 @@
 # Focus: Stress the tag cleanup logic inside 'mr' when value drops <= 0.
 # Strategy: Create relations between people who are members of each other's tags, then delete those relations.
 - gen.py -n 10000 --max_person_id 900 --density 0.1 --tag_focus 0.5 --phases build:2000,modify_tags:3000,modify_rels:4000,query:1000 --mr_delete_ratio 0.7 --min_qtav 100 --min_qtvs 100 # modify_tags adds people, modify_rels with high delete ratio removes links
+
+# Test Case Q-QTVS-MAX: Maximize members in one tag, high density, repeated queries.
+# Goal: Stress performance with a very large and dense tag.
+- gen.py -n 10000 --max_person_id 1200 --max_rel_value 150 --density 0.4 --tag_focus 0.9 --account_focus 0.01 --max_tag_id 0 --max_tag_size 990 --hub_bias 0.9 --num_hubs 1 --phases build_hub_rels:3000,setup_hub_tag:10,fill_hub_tag:3500,query_qtvs_on_hub_tag:3490 --min_qtvs 1500 --min_qci 10 --min_qts 10 --min_qsp 10 --min_qba 10 --min_qcs 10 --min_qtav 10 --min_qra 1 --min_qbc 1 --exception_ratio 0.02 
+
+# Test Case Q-QTVS-DYNAMIC: One large tag, frequent member/relation changes, constant qtvs.
+# Goal: Test correctness and performance when the tag's sum is constantly changing.
+- gen.py -n 10000 --max_person_id 800 --max_rel_value 100 --density 0.2 --tag_focus 0.9 --account_focus 0.01 --max_tag_id 5 --max_tag_size 600 --hub_bias 0.8 --num_hubs 1 --phases build_hub_rels:2000,setup_hub_tag:10,fill_hub_tag:2000,dynamic_qtvs_churn:5990 --min_qtvs 1000 --mr_delete_ratio 0.3 --exception_ratio 0.05
+
+# Test Case Q-QTVS-EDGE: Focus on edge cases for qtvs: empty tag, 1-person tag, 2-person (un)connected.
+# Goal: Test correctness for small/empty tags. Relies on dt, and then qtvs on non-existent/empty.
+# The generator might struggle to *only* create these, so it's mixed.
+- gen.py -n 5000 --max_person_id 100 --max_rel_value 50 --density 0.1 --tag_focus 0.8 --account_focus 0.01 --max_tag_id 20 --max_tag_size 10 --phases build:500,churn_tags_light:4000,query_all_light:500 --min_qtvs 200 --exception_ratio 0.15 --force_qtav_empty_ratio 0.2
+  # churn_tags_light uses 'dt' which can lead to querying empty/non-existent tags.
+  # force_qtav_empty_ratio is a proxy to encourage empty tag situations for queries.
+
+# Test Case Q-QTVS-MANY_TAGS: Many smaller tags, qtvs called on various tags.
+# Goal: Ensure qtvs works correctly across different tag instances.
+- gen.py -n 10000 --max_person_id 1000 --max_rel_value 100 --density 0.15 --tag_focus 0.7 --account_focus 0.05 --max_tag_id 80 --max_tag_size 100 --phases build:2000,fill_many_tags:5000,query_many_tags:3000 --min_qtvs 800 --exception_ratio 0.05
+
+# Test Case Q-QTVS-HCE-PUBLIC: Stress qtvs within public test constraints (often looser than mutual).
+# N=10000, max_person_id can be larger, e.g. 300-500.
+# This will create a reasonably large tag and query it.
+- gen.py -n 10000 --max_person_id 450 --max_rel_value 180 --density 0.25 --tag_focus 0.8 --account_focus 0.02 --max_tag_id 10 --max_tag_size 400 --hub_bias 0.7 --num_hubs 1 --phases build_hub_rels:3000,setup_hub_tag:10,fill_hub_tag:3000,query_qtvs_heavy:3990 --min_qtvs 1000 --exception_ratio 0.03
+
+# Test Case Q-QTVS-HIGH_VALUES: Large tag with high relation values.
+# Goal: Check for potential overflow if sums are large, and general performance with larger numbers.
+- gen.py -n 10000 --max_person_id 1000 --max_rel_value 200 --max_mod_value 200 --density 0.3 --tag_focus 0.85 --account_focus 0.01 --max_tag_id 8 --max_tag_size 800 --hub_bias_unused_var 0.8 --num_hubs 1 --phases build_hub_rels:2500,setup_hub_tag:10,fill_hub_tag:3000,query_qtvs_heavy:4490 --min_qtvs 1200 --exception_ratio 0.02
