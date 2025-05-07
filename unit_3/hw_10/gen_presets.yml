@@ -1,245 +1,189 @@
 # ---hw_9 strong test---
-- gen.py -n 10000 --max_person_id 2500 --density 0.005 --phases build:7000,query:3000 --min_qci 500 --min_qba 500
-- gen.py -n 10000 --max_person_id 350 --density 0.8 --phases build:7000,query:3000 --min_qts 800
-- gen.py -n 10000 --max_person_id 400 --density 0.6 --phases build:6000,query:4000 --min_qba 1500
-- gen.py -n 10000 --max_person_id 600 --density 0.15 --tag_focus 0.8 --max_tag_size 750 --phases build:1500,modify:5500,query:3000 --min_qtav 1000
-- gen.py -n 10000 --max_person_id 500 --phases build:300,modify:9700 --mr_delete_ratio 0.6
-- gen.py -n 10000 --max_person_id 700 --density 0.1 --phases build:2000,query:8000 --min_qci 1500 --min_qts 200 --min_qtav 1500 --min_qba 1500
-- gen.py -n 10000 --max_person_id 1000 --density 0.02 --phases build:5000,query:5000 --qci_focus far --min_qci 2000
-- gen.py -n 10000 --max_person_id 4000 --density 0.001 --phases build:8000,query:2000 --min_qci 500 --min_qba 500
-- gen.py -n 10000 --max_person_id 200 --density 0.95 --phases build:5000,query:5000 --min_qts 1500
-- gen.py -n 10000 --max_person_id 800 --density 0.1 --tag_focus 0.9 --max_tag_size 950 --phases build:1000,modify:6000,query:3000 --min_qtav 2000
-- gen.py -n 10000 --max_person_id 1000 --phases build:50,modify:9950 --mr_delete_ratio 0.8
-- gen.py -n 10000 --max_person_id 500 --density 0.4 --tag_focus 0.5 --phases build:1000,query:1000,modify:1000,build:1000,query:1000,modify:1000,build:1000,query:1000,modify:1000,query:1000
-- gen.py -n 10000 --max_person_id 5000 --density 0.9 --phases build:9000,query:1000 --min_qci 50 --min_qba 50 --exception_ratio 0.3 # max_age/value/mod_value 默认 200
-- gen.py -n 10000 --max_person_id 300 --density 0.9 --phases build:8000,query:2000 --min_qts 1500 --exception_ratio 0.05 # max_age/value/mod_value 默认 200
-- gen.py -n 10000 --max_person_id 500 --density 0.9 --max_tag_id 1000 --tag_focus 0.8 --phases build:1000,modify:8000,query:1000 --min_qtav 500 --exception_ratio 0.1 # max_age/value/mod_value 默认 200
-- gen.py -n 10000 --max_person_id 500 --density 0.9 --max_tag_id 100 --max_tag_size 100 --tag_focus 0.8 --phases build:1000,modify:8000,query:1000 --min_qtav 300 --exception_ratio 0.1 # max_age/value/mod_value 默认 200
-- gen.py -n 10000 --max_person_id 400 --density 0.95 --tag_focus 0.5 --max_tag_size 50 --phases build:2000,modify:4000,query:4000 --exception_ratio 0.4 --force_qba_empty_ratio 0.1 --force_qtav_empty_ratio 0.1 # max_age/value/mod_value 默认 200
-- gen.py -n 10000 --max_person_id 1000 --density 0.8 --tag_focus 0.5 --phases build:2000,query:8000 --min_qci 2000 --min_qts 500 --min_qtav 2000 --min_qba 2000 --exception_ratio 0.05 # max_age/value/mod_value 默认 200
-- gen.py -n 10000 --max_person_id 350 --density 0.7 --phases build:5000,query:5000 --min_qts 1000 --min_qci 500 --min_qba 500 --min_qtav 500 --exception_ratio 0.05 # max_age/value/mod_value 默认 200
-- gen.py -n 10000 --max_person_id 1000 --density 0.7 --max_tag_id 500 --max_tag_size 200 --tag_focus 0.7 --phases build:1500,modify:5000,query:3500 --min_qtav 2000 --min_qci 500 --exception_ratio 0.1 # max_age/value/mod_value 默认 200
-- gen.py -n 10000 --max_person_id 1100 --density 0.7 --hub_bias 0.9 --num_hubs 1 --phases build_hub_rels:5000,modify_tags:4500,query:500 --tag_focus 0.8 --max_tag_size 1000 --min_qtav 100 --exception_ratio 0.05 # max_age/value/mod_value 默认 200 (Phases mapped in get_command_weights)
-- gen.py -n 10000 --max_person_id 500 --density 0.2 --phases build:3000,modify_tags:3000,modify_rels:3000,query:1000 --tag_focus 0.7 --mr_delete_ratio 0.6 --min_qtav 500 --exception_ratio 0.15 # max_age/value/mod_value 默认 200 (Phases mapped in get_command_weights)
-- gen.py -n 10000 --max_person_id 400 --max_mod_value 50 --density 0.4 --phases build:7000,query:3000 --min_qba 1500 --exception_ratio 0.02 # max_age/value 默认 200, mod_value=50 is compliant
-- gen.py -n 10000 --max_person_id 600 --density 0.1 --phases build:2000,churn:6000,query:2000 --tag_focus 0.8 --force_qtav_empty_ratio 0.2 --min_qtav 1000 --exception_ratio 0.1 # max_age/value/mod_value 默认 200
-- gen.py -n 10000 --max_person_id 500 --density 0.15 --phases build:3000,modify_tags:4000,query:3000 --tag_focus 0.7 --min_qtav 500 --exception_ratio 0.2 # max_age/value/mod_value 默认 200 (Phases mapped in get_command_weights)
-- gen.py -n 10000 --max_person_id 400 --density 0.3 --tag_focus 0.6 --mr_delete_ratio 0.5 --phases build:1000,churn:8000,query:1000 --exception_ratio 0.5 --force_qba_empty_ratio 0.15 --force_qtav_empty_ratio 0.15 # max_age/value/mod_value 默认 200
-- gen.py -n 10000 --max_person_id 1200 --density 0.4 --hub_bias 0.98 --num_hubs 1 --max_tag_id 0 --max_tag_size 1000 --phases build_hub_rels:4500,setup_hub_tag:10,fill_hub_tag:5000,test_limit:490 --tag_focus 0.95 --min_qtav 20 --exception_ratio 0.1 # max_age/value/mod_value 默认 200 (Phases mapped in get_command_weights)
-- gen.py -n 10000 --max_person_id 1150 --density 0.5 --hub_bias 0.95 --num_hubs 1 --max_tag_id 0 --max_tag_size 1000 --phases build_hub_rels:2500,setup_hub_tag:5,fill_hub_tag:7000,test_limit:495 --tag_focus 0.98 --min_qtav 10 --exception_ratio 0.15 # max_age/value/mod_value 默认 200 (Phases mapped in get_command_weights)
-- gen.py -n 10000 --max_person_id 1200 --density 0.4 --hub_bias 0.98 --num_hubs 1 --max_tag_id 0 --max_tag_size 1000 --phases build_hub_rels:4000,setup_hub_tag:10,fill_and_query:5000,test_limit:990 --tag_focus 0.8 --min_qtav 500 --exception_ratio 0.1 # max_age/value/mod_value 默认 200 (Phases mapped in get_command_weights)
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 2500 --density 0.005 --phases build:7000,query:3000 --min_qci 500 --min_qba 500
+- gen.py --use_ln_setup --ln_nodes 350 --ln_default_value 10 -n 10000 --max_person_id 350 --density 0.8 --phases build:7000,query:3000 --min_qts 800
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 10000 --max_person_id 400 --density 0.6 --phases build:6000,query:4000 --min_qba 1500
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 600 --density 0.15 --tag_focus 0.8 --max_tag_size 750 --phases build:1500,modify:5500,query:3000 --min_qtav 1000
+- gen.py --use_ln_setup --ln_nodes 300 --ln_default_value 10 -n 10000 --max_person_id 500 --phases build:300,modify:9700 --mr_delete_ratio 0.6
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 700 --density 0.1 --phases build:2000,query:8000 --min_qci 1500 --min_qts 200 --min_qtav 1500 --min_qba 1500
+- gen.py --use_ln_setup --ln_nodes 600 --ln_default_value 10 -n 10000 --max_person_id 1000 --density 0.02 --phases build:5000,query:5000 --qci_focus far --min_qci 2000
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 4000 --density 0.001 --phases build:8000,query:2000 --min_qci 500 --min_qba 500
+- gen.py --use_ln_setup --ln_nodes 200 --ln_default_value 10 -n 10000 --max_person_id 200 --density 0.95 --phases build:5000,query:5000 --min_qts 1500
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 800 --density 0.1 --tag_focus 0.9 --max_tag_size 950 --phases build:1000,modify:6000,query:3000 --min_qtav 2000
+- gen.py --use_ln_setup --ln_nodes 200 --ln_default_value 10 -n 10000 --max_person_id 1000 --phases build:50,modify:9950 --mr_delete_ratio 0.8
+- gen.py --use_ln_setup --ln_nodes 300 --ln_default_value 10 -n 10000 --max_person_id 500 --density 0.4 --tag_focus 0.5 --phases build:1000,query:1000,modify:1000,build:1000,query:1000,modify:1000,build:1000,query:1000,modify:1000,query:1000
+- gen.py --use_ln_setup --ln_nodes 1000 --ln_default_value 10 -n 10000 --max_person_id 5000 --density 0.9 --phases build:9000,query:1000 --min_qci 50 --min_qba 50 --exception_ratio 0.3
+- gen.py --use_ln_setup --ln_nodes 300 --ln_default_value 10 -n 10000 --max_person_id 300 --density 0.9 --phases build:8000,query:2000 --min_qts 1500 --exception_ratio 0.05
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 10000 --max_person_id 500 --density 0.9 --max_tag_id 1000 --tag_focus 0.8 --phases build:1000,modify:8000,query:1000 --min_qtav 500 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 10000 --max_person_id 500 --density 0.9 --max_tag_id 100 --max_tag_size 100 --tag_focus 0.8 --phases build:1000,modify:8000,query:1000 --min_qtav 300 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 10000 --max_person_id 400 --density 0.95 --tag_focus 0.5 --max_tag_size 50 --phases build:2000,modify:4000,query:4000 --exception_ratio 0.4 --force_qba_empty_ratio 0.1 --force_qtav_empty_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 600 --ln_default_value 10 -n 10000 --max_person_id 1000 --density 0.8 --tag_focus 0.5 --phases build:2000,query:8000 --min_qci 2000 --min_qts 500 --min_qtav 2000 --min_qba 2000 --exception_ratio 0.05
+- gen.py --use_ln_setup --ln_nodes 350 --ln_default_value 10 -n 10000 --max_person_id 350 --density 0.7 --phases build:5000,query:5000 --min_qts 1000 --min_qci 500 --min_qba 500 --min_qtav 500 --exception_ratio 0.05
+- gen.py --use_ln_setup --ln_nodes 600 --ln_default_value 10 -n 10000 --max_person_id 1000 --density 0.7 --max_tag_id 500 --max_tag_size 200 --tag_focus 0.7 --phases build:1500,modify:5000,query:3500 --min_qtav 2000 --min_qci 500 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 1100 --density 0.7 --hub_bias 0.9 --num_hubs 1 --phases build_hub_rels:5000,modify_tags:4500,query:500 --tag_focus 0.8 --max_tag_size 1000 --min_qtav 100 --exception_ratio 0.05
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 10000 --max_person_id 500 --density 0.2 --phases build:3000,modify_tags:3000,modify_rels:3000,query:1000 --tag_focus 0.7 --mr_delete_ratio 0.6 --min_qtav 500 --exception_ratio 0.15
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 10000 --max_person_id 400 --max_mod_value 50 --density 0.4 --phases build:7000,query:3000 --min_qba 1500 --exception_ratio 0.02
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 600 --density 0.1 --phases build:2000,churn:6000,query:2000 --tag_focus 0.8 --force_qtav_empty_ratio 0.2 --min_qtav 1000 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 10000 --max_person_id 500 --density 0.15 --phases build:3000,modify_tags:4000,query:3000 --tag_focus 0.7 --min_qtav 500 --exception_ratio 0.2
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 10000 --max_person_id 400 --density 0.3 --tag_focus 0.6 --mr_delete_ratio 0.5 --phases build:1000,churn:8000,query:1000 --exception_ratio 0.5 --force_qba_empty_ratio 0.15 --force_qtav_empty_ratio 0.15
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 1200 --density 0.4 --hub_bias 0.98 --num_hubs 1 --max_tag_id 0 --max_tag_size 1000 --phases build_hub_rels:4500,setup_hub_tag:10,fill_hub_tag:5000,test_limit:490 --tag_focus 0.95 --min_qtav 20 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 1150 --density 0.5 --hub_bias 0.95 --num_hubs 1 --max_tag_id 0 --max_tag_size 1000 --phases build_hub_rels:2500,setup_hub_tag:5,fill_hub_tag:7000,test_limit:495 --tag_focus 0.98 --min_qtav 10 --exception_ratio 0.15
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 1200 --density 0.4 --hub_bias 0.98 --num_hubs 1 --max_tag_id 0 --max_tag_size 1000 --phases build_hub_rels:4000,setup_hub_tag:10,fill_and_query:5000,test_limit:990 --tag_focus 0.8 --min_qtav 500 --exception_ratio 0.1
 
 # ---hw_10 test focused
 # --- HCE Presets (符合互测限制: N<=3000, max_person_id<=99, val<=200) ---
 
 # Test Case 1: Account/Article Churn Focus (HCE)
-# Focus: High rate of coa/doa/ca/da/foa. Tests deletion logic, permission exceptions (DOAPD, DAPD, CPD), OAINF, AINF.
-# Also tests qbc/qra under churn.
-- gen.py --hce -n 3000 --max_person_id 99 --max_account_id 30 --max_article_id 300 --density 0.1 --account_focus 0.7 --tag_focus 0.1 --phases build:500,modify_accounts:2000,query:500 --exception_ratio 0.2 --min_qbc 100 --min_qra 100
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --max_account_id 30 --max_article_id 300 --density 0.1 --account_focus 0.7 --tag_focus 0.1 --phases build:500,modify_accounts:2000,query:500 --exception_ratio 0.2 --min_qbc 100 --min_qra 100
 
 # Test Case 2: Query Shortest Path Focus (HCE)
-# Focus: Generating graphs and querying qsp frequently. Includes sparse and slightly denser cases. Tests PNF and path finding.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.08 --phases build:1500,query:1500 --min_qsp 700 --exception_ratio 0.15 # Sparse graph focus
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.3 --phases build:1500,query:1500 --min_qsp 700 --exception_ratio 0.1 # Denser graph focus
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.08 --phases build:1500,query:1500 --min_qsp 700 --exception_ratio 0.15
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.3 --phases build:1500,query:1500 --min_qsp 700 --exception_ratio 0.1
 
 # Test Case 3: Query Tag Value Sum Focus (HCE)
-# Focus: Generating tags and relations within them, then querying qtvs. Requires mr/att/dft within modify phase.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.25 --tag_focus 0.6 --account_focus 0.1 --phases build:800,modify:1500,query:700 --min_qtvs 400 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.25 --tag_focus 0.6 --account_focus 0.1 --phases build:800,modify:1500,query:700 --min_qtvs 400 --exception_ratio 0.1
 
 # Test Case 4: Query Couple Sum Focus (HCE)
-# Focus: Attempting to create conditions for qcs > 0 by having high density and relation modifications. Query qcs frequently.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.5 --phases build:1000,modify:1000,query:1000 --min_qcs 300 --min_qba 50 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.5 --phases build:1000,modify:1000,query:1000 --min_qcs 300 --min_qba 50 --exception_ratio 0.1
 
 # Test Case 5: Query Best Contributor Focus (HCE)
-# Focus: Creating many accounts and articles to test qbc logic, including ties (lowest ID wins).
-- gen.py --hce -n 3000 --max_person_id 99 --max_account_id 40 --max_article_id 500 --account_focus 0.8 --tag_focus 0.05 --phases build:500,modify_accounts:2000,query:500 --min_qbc 300 --min_qra 50 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --max_account_id 40 --max_article_id 500 --account_focus 0.8 --tag_focus 0.05 --phases build:500,modify_accounts:2000,query:500 --min_qbc 300 --min_qra 50 --exception_ratio 0.1
 
 # Test Case 6: Query Received Articles Focus (HCE)
-# Focus: Heavy use of ca/foa to populate received article lists, testing the query logic (order, limit 5).
-- gen.py --hce -n 3000 --max_person_id 99 --max_account_id 35 --max_article_id 600 --account_focus 0.75 --tag_focus 0.05 --phases build:600,modify_accounts:1800,query:600 --min_qra 400 --min_qbc 50 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --max_account_id 35 --max_article_id 600 --account_focus 0.75 --tag_focus 0.05 --phases build:600,modify_accounts:1800,query:600 --min_qra 400 --min_qbc 50 --exception_ratio 0.1
 
 # Test Case 7: Mixed New Queries (HCE)
-# Focus: Ensure minimum counts for all new query types are met within HCE limits. Moderate complexity.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --account_focus 0.35 --tag_focus 0.35 --phases build:1000,modify:1000,query:1000 --min_qsp 100 --min_qtvs 100 --min_qcs 50 --min_qbc 100 --min_qra 100 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.2 --account_focus 0.35 --tag_focus 0.35 --phases build:1000,modify:1000,query:1000 --min_qsp 100 --min_qtvs 100 --min_qcs 50 --min_qbc 100 --min_qra 100 --exception_ratio 0.1
 
 # Test Case 8: High Exception Rate Focus (HCE)
-# Focus: Intentionally triggering many exceptions, including the new HW10 ones.
-- gen.py --hce -n 2500 --max_person_id 99 --max_account_id 30 --max_article_id 200 --density 0.15 --account_focus 0.4 --tag_focus 0.4 --exception_ratio 0.5 --phases build:500,modify:1500,query:500
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 2500 --max_person_id 99 --max_account_id 30 --max_article_id 200 --density 0.15 --account_focus 0.4 --tag_focus 0.4 --exception_ratio 0.5 --phases build:500,modify:1500,query:500
+
 # Test Case H-QTVS-Bottleneck (HCE)
-# Focus: Maximize qtvs work within HCE limits. Fill tags densely with interconnected nodes.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.5 --tag_focus 0.7 --max_tag_size 90 --max_tag_id 3 --phases build:800,modify_tags:1500,query:700 --min_qtvs 400
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.5 --tag_focus 0.7 --max_tag_size 90 --max_tag_id 3 --phases build:800,modify_tags:1500,query:700 --min_qtvs 400
 
 # Test Case H-DA-Bottleneck (HCE)
-# Focus: Maximize 'da' work. Requires accounts with many followers (up to 99 possible).
-- gen.py --hce -n 3000 --max_person_id 99 --max_account_id 10 --max_article_id 1000 --account_focus 0.8 --phases build:500,modify_accounts:2000,query:500 --min_qra 100 # modify_accounts has high foa, ca, da weight
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --max_account_id 10 --max_article_id 1000 --account_focus 0.8 --phases build:500,modify_accounts:2000,query:500 --min_qra 100
 
 # Test Case H-CA-Bottleneck (HCE)
-# Focus: Maximize 'ca' work within HCE limits.
-- gen.py --hce -n 3000 --max_person_id 99 --max_account_id 10 --max_article_id 1500 --account_focus 0.8 --phases build:500,modify_accounts:2200,query:300 --min_qra 50 # modify_accounts has high foa, ca weight
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --max_account_id 10 --max_article_id 1500 --account_focus 0.8 --phases build:500,modify_accounts:2200,query:300 --min_qra 50
 
 # Test Case H-QTS-Bottleneck (HCE)
-# Focus: Maximize triangles for qts within HCE limits. Requires high density.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.9 --phases build:2000,query:1000 --min_qts 500
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.9 --phases build:2000,query:1000 --min_qts 500
 
 # Test Case H-QSP-Bottleneck (HCE)
-# Focus: Force longer paths in qsp within HCE limits. Lower density.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.05 --phases build:2000,query:1000 --min_qsp 300 --qci_focus far
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.05 --phases build:2000,query:1000 --min_qsp 300 --qci_focus far
 
 # Test Case H-MR-Delete-Tag-Bottleneck (HCE)
-# Focus: Stress tag cleanup in 'mr' under HCE limits.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --tag_focus 0.6 --phases build:600,modify_tags:1000,modify_rels:1000,query:400 --mr_delete_ratio 0.6 --min_qtav 50 --min_qtvs 50
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.2 --tag_focus 0.6 --phases build:600,modify_tags:1000,modify_rels:1000,query:400 --mr_delete_ratio 0.6 --min_qtav 50 --min_qtvs 50
+
 # --- HCE Presets (Mutual Test Limits: N<=3000, max_person_id<=99, val<=200) ---
 
 # Test Case H1: Dense Relation Graph (HCE)
-# Focus: Performance in a dense graph within HCE limits. max_person_id=99 allows for high density even with N=3000.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.85 --phases build:2000,query:1000 --min_qci 100 --min_qts 300 --min_qsp 100 --min_qcs 50 --min_qba 100
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.85 --phases build:2000,query:1000 --min_qci 100 --min_qts 300 --min_qsp 100 --min_qcs 50 --min_qba 100
 
 # Test Case H2: Dense Tag Membership (HCE)
-# Focus: Filling tags close to HCE capacity. Since max_person_id=99, max tag size is limited by available related people, but we target high counts.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.4 --tag_focus 0.7 --max_tag_size 80 --max_tag_id 5 --phases build:800,modify_tags:1500,query:700 --min_qtav 200 --min_qtvs 200 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.4 --tag_focus 0.7 --max_tag_size 80 --max_tag_id 5 --phases build:800,modify_tags:1500,query:700 --min_qtav 200 --min_qtvs 200 --exception_ratio 0.1
 
 # Test Case H3: High Tag Churn (HCE)
-# Focus: Frequent tag/member changes within HCE limits.
-- gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --tag_focus 0.7 --phases build:500,churn:2000,query:500 --exception_ratio 0.2 --min_qtav 100 --min_qtvs 100
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --density 0.2 --tag_focus 0.7 --phases build:500,churn:2000,query:500 --exception_ratio 0.2 --min_qtav 100 --min_qtvs 100
 
 # Test Case H4: Dense Article Graph (HCE)
-# Focus: Maximize articles within HCE constraints. Limited by N=3000 total operations.
-- gen.py --hce -n 3000 --max_person_id 99 --max_account_id 40 --max_article_id 1500 --account_focus 0.75 --phases build:700,modify_accounts:1800,query:500 --min_qra 200 --min_qbc 100 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --max_account_id 40 --max_article_id 1500 --account_focus 0.75 --phases build:700,modify_accounts:1800,query:500 --min_qra 200 --min_qbc 100 --exception_ratio 0.1
 
 # Test Case H5: High Account/Article Churn (HCE)
-# Focus: Frequent account/article creation/deletion within HCE limits.
-- gen.py --hce -n 3000 --max_person_id 99 --max_account_id 35 --max_article_id 1000 --account_focus 0.7 --phases build:500,churn:2000,query:500 --exception_ratio 0.3 --min_qbc 80 --min_qra 80
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --max_account_id 35 --max_article_id 1000 --account_focus 0.7 --phases build:500,churn:2000,query:500 --exception_ratio 0.3 --min_qbc 80 --min_qra 80
 
 # Test Case Q-QTVS-HCE-MUTUAL: Stress qtvs within typical HCE mutual test constraints.
-# N=3000, max_person_id=99. Max tag size will be limited by max_person_id.
-- gen.py --hce -n 3000 --max_person_id 99 --max_rel_value 180 --density 0.3 --tag_focus 0.8 --account_focus 0.02 --max_tag_id 5 --max_tag_size 80 --hub_bias 0.7 --num_hubs 1 --phases build_hub_rels:800,setup_hub_tag:5,fill_hub_tag:1000,query_qtvs_heavy:1195 --min_qtvs 300 --exception_ratio 0.04
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --max_rel_value 180 --density 0.3 --tag_focus 0.8 --account_focus 0.02 --max_tag_id 5 --max_tag_size 80 --hub_bias 0.7 --num_hubs 1 --phases build_hub_rels:800,setup_hub_tag:5,fill_hub_tag:1000,query_qtvs_heavy:1195 --min_qtvs 300 --exception_ratio 0.04
 
 # --- Non-HCE Presets (符合公测限制: N<=10000, val<=200) ---
 
 # Test Case 9: Large Scale Account/Article Churn (Public)
-# Focus: Similar to HCE version but at larger scale. Tests performance under account/article modifications.
-- gen.py -n 10000 --max_person_id 800 --max_account_id 300 --max_article_id 2000 --density 0.05 --account_focus 0.6 --tag_focus 0.1 --phases build:2000,modify_accounts:6000,query:2000 --exception_ratio 0.15 --min_qbc 500 --min_qra 500
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 800 --max_account_id 300 --max_article_id 2000 --density 0.05 --account_focus 0.6 --tag_focus 0.1 --phases build:2000,modify_accounts:6000,query:2000 --exception_ratio 0.15 --min_qbc 500 --min_qra 500
 
 # Test Case 10: Large Scale Shortest Path (Public)
-# Focus: qsp on a large, sparse graph. Potentially long paths or many disconnected components. Performance test for qsp.
-- gen.py -n 10000 --max_person_id 3000 --density 0.008 --phases build:6000,query:4000 --min_qsp 1500 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 3000 --density 0.008 --phases build:6000,query:4000 --min_qsp 1500 --exception_ratio 0.1
 
 # Test Case 11: Large Scale Tag Value Sum (Public)
-# Focus: qtvs performance on a large graph with many tags and modifications potentially affecting tag values.
-- gen.py -n 10000 --max_person_id 1000 --density 0.1 --tag_focus 0.7 --account_focus 0.05 --max_tag_size 300 --phases build:2000,modify:5000,query:3000 --min_qtvs 1000 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 600 --ln_default_value 10 -n 10000 --max_person_id 1000 --density 0.1 --tag_focus 0.7 --account_focus 0.05 --max_tag_size 300 --phases build:2000,modify:5000,query:3000 --min_qtvs 1000 --exception_ratio 0.1
 
 # Test Case 12: Large Scale Best Contributor (Public)
-# Focus: qbc performance with many accounts, followers, and contributions.
-- gen.py -n 10000 --max_person_id 500 --max_account_id 1000 --max_article_id 5000 --account_focus 0.85 --tag_focus 0.02 --phases build:1500,modify_accounts:6500,query:2000 --min_qbc 1000 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 10000 --max_person_id 500 --max_account_id 1000 --max_article_id 5000 --account_focus 0.85 --tag_focus 0.02 --phases build:1500,modify_accounts:6500,query:2000 --min_qbc 1000 --exception_ratio 0.1
 
 # Test Case 13: Large Scale Received Articles (Public)
-# Focus: qra performance and correctness with many people receiving many articles.
-- gen.py -n 10000 --max_person_id 600 --max_account_id 500 --max_article_id 6000 --account_focus 0.8 --tag_focus 0.03 --phases build:2000,modify_accounts:6000,query:2000 --min_qra 1500 --exception_ratio 0.05
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 600 --max_account_id 500 --max_article_id 6000 --account_focus 0.8 --tag_focus 0.03 --phases build:2000,modify_accounts:6000,query:2000 --min_qra 1500 --exception_ratio 0.05
 
 # Test Case 14: Mixed Heavy Load (Public)
-# Focus: General performance stress test with large N, significant number of all entities, and mix of operations including new queries.
-- gen.py -n 10000 --max_person_id 1500 --max_account_id 400 --max_article_id 4000 --density 0.05 --account_focus 0.3 --tag_focus 0.3 --phases build:3000,modify:4000,query:3000 --min_qsp 300 --min_qtvs 300 --min_qcs 100 --min_qbc 300 --min_qra 300 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 700 --ln_default_value 10 -n 10000 --max_person_id 1500 --max_account_id 400 --max_article_id 4000 --density 0.05 --account_focus 0.3 --tag_focus 0.3 --phases build:3000,modify:4000,query:3000 --min_qsp 300 --min_qtvs 300 --min_qcs 100 --min_qbc 300 --min_qra 300 --exception_ratio 0.1
 
 # Test Case 15: Article ID Collision Focus (Public)
-# Focus: Generate many articles, potentially increasing chances of EAI exception if generation/checking is flawed. High 'ca' weight.
-- gen.py -n 8000 --max_person_id 300 --max_account_id 100 --max_article_id 1000 --account_focus 0.9 --phases build:1000,modify_accounts:6000,query:1000 --exception_ratio 0.1 --min_qbc 100 --min_qra 100 # modify_accounts phase implicitly uses high 'ca' weight due to high account_focus
+- gen.py --use_ln_setup --ln_nodes 300 --ln_default_value 10 -n 8000 --max_person_id 300 --max_account_id 100 --max_article_id 1000 --account_focus 0.9 --phases build:1000,modify_accounts:6000,query:1000 --exception_ratio 0.1 --min_qbc 100 --min_qra 100
 
 # Test Case 16: Official Account ID Collision Focus (Public)
-# Focus: Generate many accounts, potentially increasing chances of EOAI exception. High 'coa' weight.
-- gen.py -n 8000 --max_person_id 500 --max_account_id 200 --max_article_id 500 --account_focus 0.9 --phases build:1000,modify_accounts:6000,query:1000 --exception_ratio 0.1 # modify_accounts phase implicitly uses high 'coa' weight
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 8000 --max_person_id 500 --max_account_id 200 --max_article_id 500 --account_focus 0.9 --phases build:1000,modify_accounts:6000,query:1000 --exception_ratio 0.1
 
 # Test Case 17: Delete Permission Denied Focus (Public)
-# Focus: Create accounts/articles and then frequently attempt deletion with incorrect person IDs to trigger DOAPD/DAPD. Requires high exception ratio and specific exception generation logic in gen.py.
-- gen.py -n 9000 --max_person_id 400 --max_account_id 150 --max_article_id 1000 --density 0.2 --account_focus 0.5 --tag_focus 0.1 --phases build:2000,modify_accounts:5000,query:2000 --exception_ratio 0.4 --min_qbc 100 --min_qra 100 # High exception ratio increases chance of generating permission errors
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 9000 --max_person_id 400 --max_account_id 150 --max_article_id 1000 --density 0.2 --account_focus 0.5 --tag_focus 0.1 --phases build:2000,modify_accounts:5000,query:2000 --exception_ratio 0.4 --min_qbc 100 --min_qra 100
 
 # --- HW10 Specific Stress Test Presets ---
 
 # --- Non-HCE Presets (Public Test Limits: N<=10000, val<=200) ---
 
 # Test Case P1: Dense Relation Graph
-# Focus: Performance of relation-heavy operations (qv, qci, qts, qsp, qba, qcs) in a very dense graph.
-# High density requires a lower max_person_id relative to N to be achievable.
-- gen.py -n 10000 --max_person_id 450 --density 0.95 --phases build:7000,query:3000 --min_qci 200 --min_qts 1000 --min_qsp 200 --min_qcs 100 --min_qba 200
+- gen.py --use_ln_setup --ln_nodes 450 --ln_default_value 10 -n 10000 --max_person_id 450 --density 0.95 --phases build:7000,query:3000 --min_qci 200 --min_qts 1000 --min_qsp 200 --min_qcs 100 --min_qba 200
 
 # Test Case P2: Dense Tag Membership
-# Focus: Performance of tag operations (att, dft, qtav, qtvs) when tags contain many members (up to JML limit).
-# Needs sufficient people and relations first. Uses modify_tags phase which weights att/dft heavily.
-- gen.py -n 10000 --max_person_id 1200 --density 0.1 --tag_focus 0.8 --max_tag_size 990 --max_tag_id 10 --phases build:2500,modify_tags:5500,query:2000 --min_qtav 500 --min_qtvs 500 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 1200 --density 0.1 --tag_focus 0.8 --max_tag_size 990 --max_tag_id 10 --phases build:2500,modify_tags:5500,query:2000 --min_qtav 500 --min_qtvs 500 --exception_ratio 0.1
 
 # Test Case P3: High Tag Churn
-# Focus: Correctness and performance under frequent tag creation/deletion and member addition/removal. Uses churn phase.
-- gen.py -n 10000 --max_person_id 800 --density 0.15 --tag_focus 0.75 --phases build:1000,churn:7000,query:2000 --exception_ratio 0.25 --min_qtav 200 --min_qtvs 200
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 800 --density 0.15 --tag_focus 0.75 --phases build:1000,churn:7000,query:2000 --exception_ratio 0.25 --min_qtav 200 --min_qtvs 200
 
 # Test Case P4: Dense Article Graph
-# Focus: Performance with a very large number of articles present globally and distributed across accounts. Tests ca, da, qra, qbc efficiency. modify_accounts phase has high ca weight due to focus.
-- gen.py -n 10000 --max_person_id 500 --max_account_id 800 --max_article_id 15000 --account_focus 0.8 --phases build:2000,modify_accounts:6000,query:2000 --min_qra 800 --min_qbc 300 --exception_ratio 0.1
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 500 --max_account_id 800 --max_article_id 15000 --account_focus 0.8 --phases build:2000,modify_accounts:6000,query:2000 --min_qra 800 --min_qbc 300 --exception_ratio 0.1
 
 # Test Case P5: High Account/Article Churn
-# Focus: Correctness and performance under frequent account/article creation/deletion and follower changes. High exception ratio tests permission errors. Uses churn phase.
-- gen.py -n 10000 --max_person_id 600 --max_account_id 400 --max_article_id 4000 --account_focus 0.8 --phases build:1000,churn:7500,query:1500 --exception_ratio 0.3 --min_qbc 200 --min_qra 200
-
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 600 --max_account_id 400 --max_article_id 4000 --account_focus 0.8 --phases build:1000,churn:7500,query:1500 --exception_ratio 0.3 --min_qbc 200 --min_qra 200
 
 # Test Case P-QTVS-Bottleneck: Query Tag Value Sum with Dense Intra-Tag Relations
-# Focus: Maximize work for qtvs. Create a large tag where members are densely interconnected with high relation values.
-# Strategy: Use hub to gather many nodes, add them to hub's tag, then ensure high density *among tag members*. query phase focuses on qtvs.
-- gen.py -n 10000 --max_person_id 1300 --density 0.3 --hub_bias 0.9 --num_hubs 1 --max_tag_id 1 --max_tag_size 1000 --tag_focus 0.8 --phases build_hub_rels:3000,setup_hub_tag:10,fill_hub_tag:4000,query:2990 --min_qtvs 1500
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 1300 --density 0.3 --hub_bias 0.9 --num_hubs 1 --max_tag_id 1 --max_tag_size 1000 --tag_focus 0.8 --phases build_hub_rels:3000,setup_hub_tag:10,fill_hub_tag:4000,query:2990 --min_qtvs 1500
 
 # Test Case P-DA-Bottleneck: Delete Article from Accounts with Massive Followers
-# Focus: Maximize work for da by deleting from accounts followed by almost everyone.
-# Strategy: Create few accounts. Have most people follow them. Add many articles. Delete many articles.
-- gen.py -n 10000 --max_person_id 1500 --max_account_id 5 --max_article_id 8000 --account_focus 0.9 --phases build:1000,modify_accounts:8000,query:1000 --min_qra 200 --min_qbc 50 # modify_accounts phase weights foa, ca, da heavily
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 1500 --max_account_id 5 --max_article_id 8000 --account_focus 0.9 --phases build:1000,modify_accounts:8000,query:1000 --min_qra 200 --min_qbc 50
 
 # Test Case P-CA-Bottleneck: Contribute Article to Accounts with Massive Followers
-# Focus: Stress 'ca' by adding articles to accounts followed by almost everyone. Tests adding to many receivedArticle lists.
-# Strategy: Similar setup to P-DA, but focus on the 'ca' part within the modify_accounts phase.
-- gen.py -n 10000 --max_person_id 1500 --max_account_id 5 --max_article_id 12000 --account_focus 0.9 --phases build:1000,modify_accounts:8500,query:500 --min_qra 100 # modify_accounts phase weights foa, ca heavily
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 1500 --max_account_id 5 --max_article_id 12000 --account_focus 0.9 --phases build:1000,modify_accounts:8500,query:500 --min_qra 100
 
 # Test Case P-DOA-Bottleneck: Delete Account with Massive Followers/Articles
-# Focus: Stress 'doa' by deleting accounts that were previously filled with followers and articles.
-# Strategy: Build large accounts like P-DA/P-CA, then use a churn/modify phase weighted towards 'doa'.
-- gen.py -n 10000 --max_person_id 1000 --max_account_id 20 --max_article_id 5000 --account_focus 0.85 --phases build:2000,modify_accounts:5000,churn:2000,query:1000 # modify_accounts builds up, churn focuses on deletion including doa
+- gen.py --use_ln_setup --ln_nodes 600 --ln_default_value 10 -n 10000 --max_person_id 1000 --max_account_id 20 --max_article_id 5000 --account_focus 0.85 --phases build:2000,modify_accounts:5000,churn:2000,query:1000
 
 # Test Case P-QTS-Bottleneck: Query Triple Sum in Extremely Dense Graph
-# Focus: Maximize the number of triangles for qts calculation. Requires very high density.
-- gen.py -n 9000 --max_person_id 400 --density 0.98 --phases build:6000,query:3000 --min_qts 2000
+- gen.py --use_ln_setup --ln_nodes 400 --ln_default_value 10 -n 9000 --max_person_id 400 --density 0.98 --phases build:6000,query:3000 --min_qts 2000
 
 # Test Case P-QCS-Bottleneck: Query Couple Sum (Maximize qba calls)
-# Focus: Maximize calls to qba within qcs. Needs a graph where best acquaintances are likely mutual. High degree helps.
-- gen.py -n 10000 --max_person_id 500 --density 0.8 --phases build:6000,query:4000 --min_qcs 500 --min_qba 200 # High density increases chances of mutual best acq.
+- gen.py --use_ln_setup --ln_nodes 450 --ln_default_value 10 -n 10000 --max_person_id 500 --density 0.8 --phases build:6000,query:4000 --min_qcs 500 --min_qba 200
 
 # Test Case P-QSP-Bottleneck: Query Shortest Path in Large Diameter Graph
-# Focus: Force BFS to explore deeply. Use a large, sparse graph (line or chain-like structures are ideal but hard to force directly). Low density increases diameter.
-- gen.py -n 10000 --max_person_id 4000 --density 0.002 --phases build:7000,query:3000 --min_qsp 1000 --qci_focus far
+- gen.py --use_ln_setup --ln_nodes 1000 --ln_default_value 10 -n 10000 --max_person_id 4000 --density 0.002 --phases build:7000,query:3000 --min_qsp 1000 --qci_focus far
 
 # Test Case P-MR-Delete-Tag-Bottleneck: Modify Relation Deletes Triggering Tag Cleanup
-# Focus: Stress the tag cleanup logic inside 'mr' when value drops <= 0.
-# Strategy: Create relations between people who are members of each other's tags, then delete those relations.
-- gen.py -n 10000 --max_person_id 900 --density 0.1 --tag_focus 0.5 --phases build:2000,modify_tags:3000,modify_rels:4000,query:1000 --mr_delete_ratio 0.7 --min_qtav 100 --min_qtvs 100 # modify_tags adds people, modify_rels with high delete ratio removes links
+- gen.py --use_ln_setup --ln_nodes 600 --ln_default_value 10 -n 10000 --max_person_id 900 --density 0.1 --tag_focus 0.5 --phases build:2000,modify_tags:3000,modify_rels:4000,query:1000 --mr_delete_ratio 0.7 --min_qtav 100 --min_qtvs 100
 
 # Test Case Q-QTVS-MAX: Maximize members in one tag, high density, repeated queries.
-# Goal: Stress performance with a very large and dense tag.
-- gen.py -n 10000 --max_person_id 1200 --max_rel_value 150 --density 0.4 --tag_focus 0.9 --account_focus 0.01 --max_tag_id 0 --max_tag_size 990 --hub_bias 0.9 --num_hubs 1 --phases build_hub_rels:3000,setup_hub_tag:10,fill_hub_tag:3500,query_qtvs_on_hub_tag:3490 --min_qtvs 1500 --min_qci 10 --min_qts 10 --min_qsp 10 --min_qba 10 --min_qcs 10 --min_qtav 10 --min_qra 1 --min_qbc 1 --exception_ratio 0.02 
+- gen.py --use_ln_setup --ln_nodes 800 --ln_default_value 10 -n 10000 --max_person_id 1200 --max_rel_value 150 --density 0.7 --tag_focus 0.9 --account_focus 0.01 --max_tag_id 0 --max_tag_size 990 --hub_bias 0.9 --num_hubs 1 --phases build_hub_rels:3000,setup_hub_tag:10,fill_hub_tag:3500,query_qtvs_heavy:3490 --min_qtvs 1500 --min_qci 10 --min_qts 10 --min_qsp 10 --min_qba 10 --min_qcs 10 --min_qtav 10 --min_qra 1 --min_qbc 1 --exception_ratio 0.02
 
 # Test Case Q-QTVS-DYNAMIC: One large tag, frequent member/relation changes, constant qtvs.
-# Goal: Test correctness and performance when the tag's sum is constantly changing.
-- gen.py -n 10000 --max_person_id 800 --max_rel_value 100 --density 0.2 --tag_focus 0.9 --account_focus 0.01 --max_tag_id 5 --max_tag_size 600 --hub_bias 0.8 --num_hubs 1 --phases build_hub_rels:2000,setup_hub_tag:10,fill_hub_tag:2000,dynamic_qtvs_churn:5990 --min_qtvs 1000 --mr_delete_ratio 0.3 --exception_ratio 0.05
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 800 --max_rel_value 100 --density 0.6 --tag_focus 0.9 --account_focus 0.01 --max_tag_id 5 --max_tag_size 600 --hub_bias 0.8 --num_hubs 1 --phases build_hub_rels:2000,setup_hub_tag:10,fill_hub_tag:2000,dynamic_qtvs_churn:5990 --min_qtvs 1000 --mr_delete_ratio 0.3 --exception_ratio 0.05
 
 # Test Case Q-QTVS-EDGE: Focus on edge cases for qtvs: empty tag, 1-person tag, 2-person (un)connected.
-# Goal: Test correctness for small/empty tags. Relies on dt, and then qtvs on non-existent/empty.
-# The generator might struggle to *only* create these, so it's mixed.
-- gen.py -n 5000 --max_person_id 100 --max_rel_value 50 --density 0.1 --tag_focus 0.8 --account_focus 0.01 --max_tag_id 20 --max_tag_size 10 --phases build:500,churn_tags_light:4000,query_all_light:500 --min_qtvs 200 --exception_ratio 0.15 --force_qtav_empty_ratio 0.2
-  # churn_tags_light uses 'dt' which can lead to querying empty/non-existent tags.
-  # force_qtav_empty_ratio is a proxy to encourage empty tag situations for queries.
+- gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 -n 5000 --max_person_id 100 --max_rel_value 50 --density 0.5 --tag_focus 0.8 --account_focus 0.01 --max_tag_id 20 --max_tag_size 10 --phases build:500,churn_tags_light:4000,query_all_light:500 --min_qtvs 200 --exception_ratio 0.15 --force_qtav_empty_ratio 0.2
 
 # Test Case Q-QTVS-MANY_TAGS: Many smaller tags, qtvs called on various tags.
-# Goal: Ensure qtvs works correctly across different tag instances.
-- gen.py -n 10000 --max_person_id 1000 --max_rel_value 100 --density 0.15 --tag_focus 0.7 --account_focus 0.05 --max_tag_id 80 --max_tag_size 100 --phases build:2000,fill_many_tags:5000,query_many_tags:3000 --min_qtvs 800 --exception_ratio 0.05
+- gen.py --use_ln_setup --ln_nodes 600 --ln_default_value 10 -n 10000 --max_person_id 1000 --max_rel_value 100 --density 0.35 --tag_focus 0.7 --account_focus 0.05 --max_tag_id 80 --max_tag_size 100 --phases build:2000,fill_many_tags:5000,query_many_tags:3000 --min_qtvs 800 --exception_ratio 0.05
 
 # Test Case Q-QTVS-HCE-PUBLIC: Stress qtvs within public test constraints (often looser than mutual).
-# N=10000, max_person_id can be larger, e.g. 300-500.
-# This will create a reasonably large tag and query it.
-- gen.py -n 10000 --max_person_id 450 --max_rel_value 180 --density 0.25 --tag_focus 0.8 --account_focus 0.02 --max_tag_id 10 --max_tag_size 400 --hub_bias 0.7 --num_hubs 1 --phases build_hub_rels:3000,setup_hub_tag:10,fill_hub_tag:3000,query_qtvs_heavy:3990 --min_qtvs 1000 --exception_ratio 0.03
+- gen.py --use_ln_setup --ln_nodes 450 --ln_default_value 10 -n 10000 --max_person_id 450 --max_rel_value 180 --density 0.35 --tag_focus 0.8 --account_focus 0.02 --max_tag_id 10 --max_tag_size 400 --hub_bias 0.7 --num_hubs 1 --phases build_hub_rels:3000,setup_hub_tag:10,fill_hub_tag:3000,query_qtvs_heavy:3990 --min_qtvs 1000 --exception_ratio 0.03
 
 # Test Case Q-QTVS-HIGH_VALUES: Large tag with high relation values.
-# Goal: Check for potential overflow if sums are large, and general performance with larger numbers.
-- gen.py -n 10000 --max_person_id 1000 --max_rel_value 200 --max_mod_value 200 --density 0.3 --tag_focus 0.85 --account_focus 0.01 --max_tag_id 8 --max_tag_size 800 --hub_bias_unused_var 0.8 --num_hubs 1 --phases build_hub_rels:2500,setup_hub_tag:10,fill_hub_tag:3000,query_qtvs_heavy:4490 --min_qtvs 1200 --exception_ratio 0.02
+- gen.py --use_ln_setup --ln_nodes 700 --ln_default_value 10 -n 10000 --max_person_id 1000 --max_rel_value 200 --max_mod_value 200 --density 0.3 --tag_focus 0.85 --account_focus 0.01 --max_tag_id 8 --max_tag_size 800 --hub_bias 0.8 --num_hubs 1 --phases build_hub_rels:2500,setup_hub_tag:10,fill_hub_tag:3000,query_qtvs_heavy:4490 --min_qtvs 1200 --exception_ratio 0.02
+
+# Test Case Q-QTVS-COMPLETE: Complete graph with many qtvs
+- gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 600 --max_rel_value 100 --density 1 --tag_focus 0.9 --account_focus 0.01 --max_tag_id 5 --max_tag_size 300 --hub_bias 0.8 --num_hubs 1 --phases build_hub_rels:2000,setup_hub_tag:10,fill_hub_tag:2000,dynamic_qtvs_churn:5990 --min_qtvs 1000 --mr_delete_ratio 0.3 --exception_ratio 0.05

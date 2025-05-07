@@ -73,54 +73,51 @@ class OfficialAccountSimulator:
         return person_id in self.followers
 
     def add_article(self, person_id, article_id):
-        # JML ensures !containsArticle, containsFollower(person) before calling
-        if person_id in self.followers:
-            self.articles.add(article_id)
-            self.followers[person_id] = self.followers.get(person_id, 0) + 1
+        # JML ensures !containsArticle (in this account), containsFollower(person) before calling
+        if person_id in self.followers: # This check ensures the person is a follower
+            self.articles.add(article_id) # Add to this account's list of articles
+            self.followers[person_id] = self.followers.get(person_id, 0) + 1 # Increment contribution
         else:
-            # This case should ideally not happen if JML pre-conditions are met
-            # by the calling method (NetworkSimulator.contributeArticle)
-             print(f"CHECKER WARNING: add_article called for non-follower {person_id} on account {self.id}", file=sys.stderr)
+             print(f"CHECKER WARNING: OfficialAccountSimulator.add_article called for non-follower {person_id} on account {self.id}", file=sys.stderr)
 
 
     def contains_article(self, article_id):
         return article_id in self.articles
 
     def remove_article(self, article_id, original_contributor_id):
-        # JML ensures containsArticle before calling
-        self.articles.discard(article_id)
-        # JML ensures the contributor exists among followers when deleting
+        # JML ensures this account containsArticle before calling
+        self.articles.discard(article_id) # Remove from this account's articles
+        
+        # Decrement contribution of the original_contributor_id IF they are still a follower
         if original_contributor_id in self.followers:
             self.followers[original_contributor_id] -= 1
-            # Note: JML doesn't explicitly say what happens if contribution becomes < 0,
-            # but based on adding +1, decrementing by 1 seems correct.
+            # JML doesn't explicitly state contribution can't go below 0, but -1 is the standard interpretation.
         else:
-             print(f"CHECKER WARNING: remove_article called, but original contributor {original_contributor_id} not found in followers of account {self.id}", file=sys.stderr)
+             # This case might occur if the original contributor unfollowed the account
+             # before the article was deleted. JML for deleteArticle's ensures clause for contribution
+             # implies the person (articleContributors[i]) is still a follower.
+             # (\exists int j; ... accounts.get(accountId).followers[j].getId() == articleContributors[i] ... contributions[j] == \old -1)
+             # If this warning prints, it might indicate a subtle JML interpretation difference or a complex scenario.
+             print(f"CHECKER WARNING: OfficialAccountSimulator.remove_article: Original contributor {original_contributor_id} not found in current followers of account {self.id} during contribution decrement.", file=sys.stderr)
 
 
     def get_best_contributor(self):
         if not self.followers:
-            # JML doesn't explicitly define this, common practice might be 0 or error.
-            # The JML formula implies min ID over non-empty set.
-            # Let's return 0 if no followers, assuming IDs are > 0 or tests handle this.
-            # Or perhaps the calling code should handle empty follower list.
-            # Following the spec's min logic: if no one qualifies, there's no min.
-            # Let's assume test cases won't query best contributor on accounts with 0 followers
-            # or expect a specific value like 0. If they do, we might need adjustment.
-            # For now, let's find the max contribution and then the min ID.
-             return 0 # Default or needs clarification based on test cases
+             return 0 
 
-        max_contribution = -1 # Contributions are >= 0
+        max_contribution = -1 
         for contribution in self.followers.values():
             max_contribution = max(max_contribution, contribution)
+        
+        if max_contribution == -1: # No followers or all contributions somehow negative (should not happen)
+            return 0
 
         best_id = float('inf')
         for person_id, contribution in self.followers.items():
             if contribution == max_contribution:
                 best_id = min(best_id, person_id)
-
-        # Should always find a best_id if followers is not empty
-        return best_id if best_id != float('inf') else 0 # Fallback
+        
+        return best_id if best_id != float('inf') else 0
 
 
 class PersonSimulator:
@@ -130,32 +127,25 @@ class PersonSimulator:
         self.age = age
         self.acquaintance = {} # maps acquaintance_id -> value
         self.tags = {} # maps tag_id -> TagSimulator object
-        # Use deque for efficient adding to front (most recent)
         self.received_articles = deque()
 
     def add_received_article(self, article_id):
-        self.received_articles.appendleft(article_id) # Add to the front
+        self.received_articles.appendleft(article_id) 
 
     def remove_received_article(self, article_id):
-        # Removing can be O(N) for deque/list if not at ends
         try:
-            # Create a new deque excluding the article_id
-            # This is simpler than finding and removing all occurrences in place
              new_deque = deque(a_id for a_id in self.received_articles if a_id != article_id)
              self.received_articles = new_deque
         except ValueError:
-             pass # Article not found, ignore
+             pass 
 
     def get_received_articles_list(self):
-        # Returns the full list (as required by internal model)
         return list(self.received_articles)
 
     def query_received_articles_list(self):
-         # Returns first 5 (or fewer) for the query method
          count = min(len(self.received_articles), 5)
          return [self.received_articles[i] for i in range(count)]
 
-    # --- Existing PersonSimulator methods ---
     def is_linked(self, other_person_id):
         return other_person_id == self.id or other_person_id in self.acquaintance
 
@@ -201,101 +191,80 @@ class PersonSimulator:
 
 class NetworkSimulator:
     def __init__(self):
-        self.persons = {} # map person_id -> PersonSimulator
-        self.accounts = {} # map account_id -> OfficialAccountSimulator
-        self.articles = set() # Global set of all existing article_ids
-        self.article_contributors = {} # map article_id -> contributor_person_id
+        self.persons = {} 
+        self.accounts = {} 
+        self.articles = set() # Global set of all existing article_ids in the Network
+        self.article_contributors = {} # Global map: article_id -> original_contributor_person_id
 
-        # Extended exception counts
         self.exception_counts = {
-            # HW8/9
             "anf": {"total": 0, "ids": defaultdict(int)}, "epi": {"total": 0, "ids": defaultdict(int)},
             "er": {"total": 0, "ids": defaultdict(int)}, "eti": {"total": 0, "ids": defaultdict(int)},
             "pinf": {"total": 0, "ids": defaultdict(int)}, "rnf": {"total": 0, "ids": defaultdict(int)},
             "tinf": {"total": 0, "ids": defaultdict(int)}, "pnf": {"total": 0, "ids": defaultdict(int)},
-            # HW10
             "eoai": {"total": 0, "ids": defaultdict(int)}, "oainf": {"total": 0, "ids": defaultdict(int)},
             "doapd": {"total": 0, "ids": defaultdict(int)}, "eai": {"total": 0, "ids": defaultdict(int)},
             "ainf": {"total": 0, "ids": defaultdict(int)}, "cpd": {"total": 0, "ids": defaultdict(int)},
             "dapd": {"total": 0, "ids": defaultdict(int)},
         }
-        # Static counts for exceptions where total count != sum of id counts
         self.er_static_count = 0
         self.pnf_static_count = 0
         self.cpd_static_count = 0
         self.dapd_static_count = 0
         self.doapd_static_count = 0
-        # RNF still needs special handling for total count (/2)
-
-        # Optimization: Store triple sum count incrementally
         self.triple_sum_count = 0
 
     def _record_exception(self, exc_type, id1, id2=None):
-        # Increment static counts first if applicable
         if exc_type == "er": self.er_static_count += 1
         elif exc_type == "pnf": self.pnf_static_count += 1
         elif exc_type == "cpd": self.cpd_static_count += 1
         elif exc_type == "dapd": self.dapd_static_count += 1
         elif exc_type == "doapd": self.doapd_static_count += 1
 
-        # Increment total count (special case for RNF handled in format)
         if exc_type != "rnf":
             self.exception_counts[exc_type]["total"] += 1
 
-        # Increment ID counts
         fmt_id1, fmt_id2 = id1, id2
-        # Ensure consistent ordering for paired exceptions before recording counts
         if exc_type in ("er", "rnf", "pnf", "cpd", "dapd", "doapd") and id2 is not None and id1 > id2:
              fmt_id1, fmt_id2 = id2, id1
 
         self.exception_counts[exc_type]["ids"][fmt_id1] += 1
         if id2 is not None:
-            # Handle cases where id1 == id2 for paired exceptions - JML implies count only once for the ID
             if fmt_id1 != fmt_id2:
                  self.exception_counts[exc_type]["ids"][fmt_id2] += 1
-            # Special RNF handling: JML records both IDs even if they are identical,
-            # and its total count is different. Let's adjust here.
             if exc_type == "rnf":
-                 # RNF increments total by 2 effectively (1 per ID)
-                 self.exception_counts[exc_type]["total"] += 2
-                 # If ids were same, the second ID count needs adding explicitly
+                 self.exception_counts[exc_type]["total"] += 2 
                  if fmt_id1 == fmt_id2:
                       self.exception_counts[exc_type]["ids"][fmt_id2] += 1
 
 
     def _format_exception(self, exc_type, id1, id2=None):
         fmt_id1, fmt_id2 = id1, id2
-        # Order IDs for formatting paired exceptions consistently
         if exc_type in ("er", "rnf", "pnf", "cpd", "dapd", "doapd") and id2 is not None and id1 > id2:
              fmt_id1, fmt_id2 = id2, id1
 
-        # Get counts based on the potentially reordered IDs
         id1_count = self.exception_counts[exc_type]["ids"].get(fmt_id1, 0)
         id2_count = self.exception_counts[exc_type]["ids"].get(fmt_id2, 0) if id2 is not None else 0
         total_count = self.exception_counts[exc_type]["total"]
 
-        # Format based on type
         if exc_type == "anf": return f"anf-{total_count}, {fmt_id1}-{id1_count}"
-        elif exc_type == "epi": return f"epi-{total_count}, {id1}-{id1_count}" # Use original id1 for epi
+        elif exc_type == "epi": return f"epi-{total_count}, {id1}-{id1_count}" 
         elif exc_type == "er": return f"er-{self.er_static_count}, {fmt_id1}-{id1_count}, {fmt_id2}-{id2_count}"
-        elif exc_type == "eti": return f"eti-{total_count}, {id1}-{id1_count}" # Use original id1 for eti
-        elif exc_type == "pinf": return f"pinf-{total_count}, {id1}-{id1_count}" # Use original id1 for pinf
+        elif exc_type == "eti": return f"eti-{total_count}, {id1}-{id1_count}" 
+        elif exc_type == "pinf": return f"pinf-{total_count}, {id1}-{id1_count}" 
         elif exc_type == "rnf":
-            total_print_count = total_count // 2 # RNF specific total count logic
+            total_print_count = total_count // 2 
             return f"rnf-{total_print_count}, {fmt_id1}-{id1_count}, {fmt_id2}-{id2_count}"
-        elif exc_type == "tinf": return f"tinf-{total_count}, {id1}-{id1_count}" # Use original id1 for tinf
+        elif exc_type == "tinf": return f"tinf-{total_count}, {id1}-{id1_count}" 
         elif exc_type == "pnf": return f"pnf-{self.pnf_static_count}, {fmt_id1}-{id1_count}, {fmt_id2}-{id2_count}"
-        # HW10 exceptions
-        elif exc_type == "eoai": return f"eoai-{total_count}, {id1}-{id1_count}" # Use original id1
-        elif exc_type == "oainf": return f"oainf-{total_count}, {id1}-{id1_count}"# Use original id1
+        elif exc_type == "eoai": return f"eoai-{total_count}, {id1}-{id1_count}" 
+        elif exc_type == "oainf": return f"oainf-{total_count}, {id1}-{id1_count}"
         elif exc_type == "doapd": return f"doapd-{self.doapd_static_count}, {fmt_id1}-{id1_count}, {fmt_id2}-{id2_count}"
-        elif exc_type == "eai": return f"eai-{total_count}, {id1}-{id1_count}" # Use original id1
-        elif exc_type == "ainf": return f"ainf-{total_count}, {id1}-{id1_count}" # Use original id1
+        elif exc_type == "eai": return f"eai-{total_count}, {id1}-{id1_count}" 
+        elif exc_type == "ainf": return f"ainf-{total_count}, {id1}-{id1_count}" 
         elif exc_type == "cpd": return f"cpd-{self.cpd_static_count}, {fmt_id1}-{id1_count}, {fmt_id2}-{id2_count}"
         elif exc_type == "dapd": return f"dapd-{self.dapd_static_count}, {fmt_id1}-{id1_count}, {fmt_id2}-{id2_count}"
         else: return "CHECKER_ERROR: Unknown exception type"
 
-    # --- Existing NetworkSimulator methods ---
     def contains_person(self, person_id):
         return person_id in self.persons
     def get_person(self, person_id):
@@ -317,12 +286,12 @@ class NetworkSimulator:
         if person1.is_linked(id2):
             self._record_exception("er", id1, id2); return self._format_exception("er", id1, id2)
         else:
-            if id1 != id2:
+            if id1 != id2: # Only add to triple_sum if distinct persons and new relation
                 neighbors1 = person1.get_neighbor_ids(); neighbors2 = person2.get_neighbor_ids()
                 common_neighbors = neighbors1.intersection(neighbors2)
                 self.triple_sum_count += len(common_neighbors)
-                person1.add_link(id2, value); person2.add_link(id1, value)
-            return "Ok" # Adding relation to self is allowed, but no effect on links/triples
+            person1.add_link(id2, value); person2.add_link(id1, value) # JML implies add_link handles id1==id2 correctly (no effect on actual links)
+            return "Ok"
 
     def modify_relation(self, id1, id2, value):
         if not self.contains_person(id1): self._record_exception("pinf", id1); return self._format_exception("pinf", id1)
@@ -335,42 +304,44 @@ class NetworkSimulator:
             old_value = person1.query_value(id2); new_value = old_value + value
             if new_value > 0:
                 person1.add_link(id2, new_value); person2.add_link(id1, new_value)
-            else: # Remove relation
+            else: 
+                # Before removing link, update triple_sum_count
                 neighbors1 = person1.get_neighbor_ids(); neighbors2 = person2.get_neighbor_ids()
-                common_neighbors = neighbors1.intersection(neighbors2)
+                # Common neighbors exclude person1 and person2 themselves if they were part of it.
+                # The intersection gives common third parties.
+                common_neighbors = (neighbors1 - {id2}).intersection(neighbors2 - {id1}) # More precise calculation of common nodes for triples
                 self.triple_sum_count -= len(common_neighbors)
+
                 person1.remove_link(id2); person2.remove_link(id1)
-                # Remove from tags
-                for tag in list(person1.tags.values()): # Iterate over copy if modifying
-                    tag.del_person(id2)
+                for tag in list(person1.tags.values()): 
+                    if tag.has_person(id2): tag.del_person(id2) # JML implies del if has
                 for tag in list(person2.tags.values()):
-                    tag.del_person(id1)
+                    if tag.has_person(id1): tag.del_person(id1)
             return "Ok"
 
     def query_value(self, id1, id2):
         if not self.contains_person(id1): self._record_exception("pinf", id1); return self._format_exception("pinf", id1)
         if not self.contains_person(id2): self._record_exception("pinf", id2); return self._format_exception("pinf", id2)
         person1 = self.get_person(id1)
-        if id1 != id2 and not person1.is_linked(id2):
+        if id1 != id2 and not person1.is_linked(id2): # JML implies queryValue for non-linked distinct persons is an error condition covered by RNF
             self._record_exception("rnf", id1, id2); return self._format_exception("rnf", id1, id2)
-        return str(person1.query_value(id2))
+        return str(person1.query_value(id2)) # query_value in PersonSimulator handles id1==id2
 
     def is_circle(self, id1, id2):
          if not self.contains_person(id1): self._record_exception("pinf", id1); return self._format_exception("pinf", id1)
          if not self.contains_person(id2): self._record_exception("pinf", id2); return self._format_exception("pinf", id2)
-         if id1 == id2: return "true" # JML implies circle check passes if id1==id2 and exists
-         # BFS Implementation
+         if id1 == id2: return "true" 
+         
          queue = deque([id1]); visited = {id1}
          while queue:
              current_id = queue.popleft()
-             # No need to check for target here in is_circle, just reachability
              current_person = self.get_person(current_id)
-             if current_person:
+             if current_person: # Should always be true if ID in self.persons
                  for neighbor_id in current_person.acquaintance.keys():
-                     if neighbor_id == id2: return "true" # Found target
+                     if neighbor_id == id2: return "true" 
                      if neighbor_id not in visited:
                          visited.add(neighbor_id); queue.append(neighbor_id)
-         return "false" # Target not reached
+         return "false"
 
     def query_triple_sum(self):
         return str(self.triple_sum_count)
@@ -387,60 +358,69 @@ class NetworkSimulator:
     def add_person_to_tag(self, person_id1, person_id2, tag_id):
         if not self.contains_person(person_id1): self._record_exception("pinf", person_id1); return self._format_exception("pinf", person_id1)
         if not self.contains_person(person_id2): self._record_exception("pinf", person_id2); return self._format_exception("pinf", person_id2)
-        if person_id1 == person_id2: self._record_exception("epi", person_id1); return self._format_exception("epi", person_id1)
-        person1 = self.get_person(person_id1); person2 = self.get_person(person_id2)
+        if person_id1 == person_id2: self._record_exception("epi", person_id1); return self._format_exception("epi", person_id1) # JML indicates epi for id1==id2
+        
+        person1 = self.get_person(person_id1); person2 = self.get_person(person_id2) # person1 is to be added, person2 owns the tag
+        
         if not person2.is_linked(person_id1): self._record_exception("rnf", person_id1, person_id2); return self._format_exception("rnf", person_id1, person_id2)
         if not person2.contains_tag(tag_id): self._record_exception("tinf", tag_id); return self._format_exception("tinf", tag_id)
+        
         tag = person2.get_tag(tag_id)
-        if tag.has_person(person_id1): self._record_exception("epi", person_id1); return self._format_exception("epi", person_id1)
-        # Size check before adding
-        if tag.get_size() < 1000: # JML <= 999 for adding
+        if tag.has_person(person_id1): self._record_exception("epi", person_id1); return self._format_exception("epi", person_id1) # JML indicates epi if person already in tag
+        
+        if tag.get_size() < 1000: 
              tag.add_person(person_id1)
-        # JML implies no output/error if size >= 1000
-        return "Ok"
+        return "Ok" # JML implies Ok even if not added due to size limit
 
     def query_tag_value_sum(self, person_id, tag_id):
-        # This calculation can be slow O(TagSize^2) if not optimized
-        # Let's implement according to JML directly first
         if not self.contains_person(person_id): self._record_exception("pinf", person_id); return self._format_exception("pinf", person_id)
         person = self.get_person(person_id)
         if not person.contains_tag(tag_id): self._record_exception("tinf", tag_id); return self._format_exception("tinf", tag_id)
+        
         tag = person.get_tag(tag_id)
-        person_ids_in_tag = tag.get_person_ids() # O(TagSize)
+        person_ids_in_tag = tag.get_person_ids() 
         value_sum = 0
-        # O(TagSize^2 * O(queryValue)) -> O(TagSize^2) with dicts
         for i in range(len(person_ids_in_tag)):
             p1_id = person_ids_in_tag[i]
             p1 = self.get_person(p1_id)
-            if not p1: continue # Should not happen in valid state
-            for j in range(len(person_ids_in_tag)): # JML includes i==j check implicit in queryValue
+            if not p1: continue 
+            for j in range(len(person_ids_in_tag)): 
                 p2_id = person_ids_in_tag[j]
-                # queryValue handles p1 == p2 and !isLinked cases returning 0
-                value = p1.query_value(p2_id)
-                value_sum += value
+                # p1.query_value(p2_id) handles cases:
+                # - p1_id == p2_id (returns 0)
+                # - p1_id != p2_id and linked (returns value)
+                # - p1_id != p2_id and not linked (returns 0)
+                value_sum += p1.query_value(p2_id) 
         return str(value_sum)
 
     def query_tag_age_var(self, person_id, tag_id):
         if not self.contains_person(person_id): self._record_exception("pinf", person_id); return self._format_exception("pinf", person_id)
         person = self.get_person(person_id)
         if not person.contains_tag(tag_id): self._record_exception("tinf", tag_id); return self._format_exception("tinf", tag_id)
+        
         tag = person.get_tag(tag_id)
-        person_ids_in_tag = tag.get_person_ids() # O(TagSize)
+        person_ids_in_tag = tag.get_person_ids() 
         ages = []
-        for pid in person_ids_in_tag: # O(TagSize)
-            p = self.get_person(pid) # O(1)
-            if p: ages.append(p.age)
-        age_var = calculate_age_var(ages) # O(TagSize)
+        for pid in person_ids_in_tag: 
+            p_obj = self.get_person(pid) # Renamed p to p_obj to avoid conflict
+            if p_obj: ages.append(p_obj.age)
+        age_var = calculate_age_var(ages) 
         return str(age_var)
 
     def del_person_from_tag(self, person_id1, person_id2, tag_id):
+        # person_id1 to be deleted, person_id2 owns the tag
         if not self.contains_person(person_id1): self._record_exception("pinf", person_id1); return self._format_exception("pinf", person_id1)
         if not self.contains_person(person_id2): self._record_exception("pinf", person_id2); return self._format_exception("pinf", person_id2)
+        
         person2 = self.get_person(person_id2)
         if not person2.contains_tag(tag_id): self._record_exception("tinf", tag_id); return self._format_exception("tinf", tag_id)
+        
         tag = person2.get_tag(tag_id)
-        if not tag.has_person(person_id1): # JML requires hasPerson -> PINF exception
+        # JML: signals (PersonIdNotFoundException e) ... !getTag(tagId).hasPerson(getPerson(personId1));
+        # This implies if person1 is NOT in the tag, it's a PersonIdNotFoundException for personId1.
+        if not tag.has_person(person_id1): 
             self._record_exception("pinf", person_id1); return self._format_exception("pinf", person_id1)
+        
         tag.del_person(person_id1)
         return "Ok"
 
@@ -454,64 +434,77 @@ class NetworkSimulator:
     def query_best_acquaintance(self, person_id):
         if not self.contains_person(person_id): self._record_exception("pinf", person_id); return self._format_exception("pinf", person_id)
         person = self.get_person(person_id)
-        acquaintances = person.get_acquaintance_ids_and_values()
+        acquaintances = person.get_acquaintance_ids_and_values() # list of (id, value) tuples
         if not acquaintances: self._record_exception("anf", person_id); return self._format_exception("anf", person_id)
-        # Find max value, then min ID with that max value
-        max_value = float('-inf')
-        # Correct logic according to JML: find max value first
-        for _, value in acquaintances: max_value = max(max_value, value)
+        
+        # JML: min bestId such that value is maximal.
+        # So, find max value first, then find min ID among those with max value.
+        max_val = -float('inf')
+        for _, val in acquaintances:
+            if val > max_val:
+                max_val = val
+        
         best_id = float('inf')
-        for acq_id, value in acquaintances:
-             if value == max_value: best_id = min(best_id, acq_id)
-        # JML guarantees existence if acquaintances is not empty
-        return str(int(best_id))
+        for acq_id, val in acquaintances:
+             if val == max_val: 
+                 best_id = min(best_id, acq_id)
+        return str(int(best_id)) # Should always find one if acquaintances is not empty
 
     def query_couple_sum(self):
-        # O(N*degree) - Iterate through all persons and check their best acquaintance
         count = 0
-        person_ids = list(self.persons.keys()) # O(N)
+        person_ids = list(self.persons.keys()) 
+        
+        # To avoid double counting, only consider (id1, id2) where id1 < id2
+        # The JML sum is over i < j.
+        # The condition is qba(persons[i].id) == persons[j].id AND qba(persons[j].id) == persons[i].id
+
+        # Precompute all best acquaintances to optimize
+        best_acquaintances_map = {}
+        for pid in person_ids:
+            person = self.get_person(pid)
+            if not person or not person.acquaintance:
+                best_acquaintances_map[pid] = None # No best acquaintance or no acquaintances
+                continue
+            
+            acquaintances = person.get_acquaintance_ids_and_values()
+            if not acquaintances: # Should be caught by person.acquaintance check
+                best_acquaintances_map[pid] = None
+                continue
+
+            max_val = -float('inf')
+            for _, val_acq in acquaintances: max_val = max(max_val, val_acq)
+            
+            current_best_id = float('inf')
+            for acq_id, val_acq in acquaintances:
+                if val_acq == max_val: current_best_id = min(current_best_id, acq_id)
+            
+            best_acquaintances_map[pid] = int(current_best_id) if current_best_id != float('inf') else None
+
         for i in range(len(person_ids)):
             id1 = person_ids[i]
-            person1 = self.get_person(id1)
-            if not person1 or not person1.acquaintance: continue # Skip if no acquaintances
+            qba_id1 = best_acquaintances_map.get(id1)
+            if qba_id1 is None: continue
 
-            # Simulate queryBestAcquaintance for id1
-            acquaintances1 = person1.get_acquaintance_ids_and_values()
-            if not acquaintances1: continue # Should be caught by above check, but safe
-            max_value1 = max(v for _, v in acquaintances1)
-            best_id1 = min(aid for aid, v in acquaintances1 if v == max_value1)
+            for j in range(i + 1, len(person_ids)): # Ensure id1 < id2 concept (p[i] < p[j])
+                id2 = person_ids[j]
+                qba_id2 = best_acquaintances_map.get(id2)
+                if qba_id2 is None: continue
 
-            # Check only pairs where id1 < best_id1 to avoid double counting
-            if id1 < best_id1:
-                id2 = best_id1
-                if not self.contains_person(id2): continue # Best acquaintance doesn't exist? Skip.
-                person2 = self.get_person(id2)
-                if not person2 or not person2.acquaintance: continue # Skip if best acq has no acquaintances
-
-                # Simulate queryBestAcquaintance for id2
-                acquaintances2 = person2.get_acquaintance_ids_and_values()
-                if not acquaintances2: continue
-                max_value2 = max(v for _, v in acquaintances2)
-                best_id2 = min(aid for aid, v in acquaintances2 if v == max_value2)
-
-                # Check if they point to each other
-                if best_id2 == id1:
+                if qba_id1 == id2 and qba_id2 == id1:
                     count += 1
         return str(count)
 
     def query_shortest_path(self, id1, id2):
-        # O(N + E) using BFS
         if not self.contains_person(id1): self._record_exception("pinf", id1); return self._format_exception("pinf", id1)
         if not self.contains_person(id2): self._record_exception("pinf", id2); return self._format_exception("pinf", id2)
-        if id1 == id2: return "0" # JML requires 0 for same id
+        if id1 == id2: return "0" 
 
-        # BFS to find shortest path length (number of edges)
-        queue = deque([(id1, 0)]) # (person_id, distance)
+        queue = deque([(id1, 0)]) 
         visited = {id1}
         while queue:
             current_id, distance = queue.popleft()
             if current_id == id2:
-                return str(distance) # Found shortest path
+                return str(distance) 
 
             current_person = self.get_person(current_id)
             if current_person:
@@ -519,11 +512,8 @@ class NetworkSimulator:
                     if neighbor_id not in visited:
                         visited.add(neighbor_id)
                         queue.append((neighbor_id, distance + 1))
-
-        # If queue empties and id2 not found
+        
         self._record_exception("pnf", id1, id2); return self._format_exception("pnf", id1, id2)
-
-    # --- HW10 Methods ---
 
     def contains_account(self, account_id):
         return account_id in self.accounts
@@ -531,8 +521,8 @@ class NetworkSimulator:
     def get_account(self, account_id):
         return self.accounts.get(account_id)
 
-    def contains_article(self, article_id):
-        return article_id in self.articles # Check global article set
+    def contains_article(self, article_id): # This checks global Network.articles
+        return article_id in self.articles
 
     def create_official_account(self, person_id, account_id, name):
         if not self.contains_person(person_id):
@@ -540,16 +530,9 @@ class NetworkSimulator:
         if self.contains_account(account_id):
             self._record_exception("eoai", account_id); return self._format_exception("eoai", account_id)
 
-        # Create account
         new_account = OfficialAccountSimulator(account_id, person_id, name)
         self.accounts[account_id] = new_account
-
-        # Add owner as follower with 0 contribution (as per JML)
-        new_account.add_follower(person_id)
-        # Note: JML doesn't explicitly state owner gets 0 contribution, but the ensures clause implies it:
-        # ensures (\exists int i; ... followers[i].getId() == personId && contributions[i] == 0);
-        # Since addFollower sets it to 0, this holds.
-
+        new_account.add_follower(person_id) # Owner becomes a follower with 0 contribution
         return "Ok"
 
     def delete_official_account(self, person_id, account_id):
@@ -561,13 +544,11 @@ class NetworkSimulator:
         account = self.get_account(account_id)
         if account.owner_id != person_id:
             self._record_exception("doapd", person_id, account_id); return self._format_exception("doapd", person_id, account_id)
-
-        # Delete the account
-        # JML 'assignable accounts' means only the accounts list/map changes.
-        # It does NOT specify removing articles from global list or received lists.
-        # Strict interpretation: just remove the account object.
+        
+        # JML assignable is only 'accounts'. It does not say to delete articles from global list,
+        # or from person's received lists if they were following this account.
+        # Strict interpretation: just remove the account object from the network's map.
         del self.accounts[account_id]
-
         return "Ok"
 
     def contribute_article(self, person_id, account_id, article_id):
@@ -575,32 +556,35 @@ class NetworkSimulator:
             self._record_exception("pinf", person_id); return self._format_exception("pinf", person_id)
         if not self.contains_account(account_id):
             self._record_exception("oainf", account_id); return self._format_exception("oainf", account_id)
-        if self.contains_article(article_id): # Check global article existence
+        
+        # JML: signals (EqualArticleIdException e) ... containsArticle(articleId);
+        # containsArticle here refers to NetworkInterface.containsArticle (global)
+        if self.contains_article(article_id): 
             self._record_exception("eai", article_id); return self._format_exception("eai", article_id)
 
         account = self.get_account(account_id)
-        person = self.get_person(person_id)
+        # person = self.get_person(person_id) # Not strictly needed for contains_follower if person_id is used
 
+        # JML: signals (ContributePermissionDeniedException e) ... !accounts.get(accountId).containsFollower(getPerson(personId));
         if not account.contains_follower(person_id):
-            self._record_exception("cpd", person_id, article_id); return self._format_exception("cpd", person_id, article_id) # Note: JML uses articleId for id2 here
+            self._record_exception("cpd", person_id, article_id); return self._format_exception("cpd", person_id, article_id) 
 
-        # Add article globally
-        self.articles.add(article_id)
-        self.article_contributors[article_id] = person_id
+        # Normal behavior:
+        self.articles.add(article_id) # Add to global Network.articles
+        self.article_contributors[article_id] = person_id # Record global contributor
 
-        # Add article to account and update contribution
-        account.add_article(person_id, article_id) # Handles adding to account.articles and incrementing contribution
+        # Add to account's articles and update contribution
+        # OfficialAccountSimulator.add_article handles its internal 'articles' set and 'followers' contributions
+        account.add_article(person_id, article_id) 
 
-        # Add article to received list of ALL current followers
-        # This can be slow if many followers O(num_followers)
-        current_follower_ids = list(account.followers.keys()) # Get a snapshot
+        # Add article to received list of ALL current followers of this account
+        current_follower_ids = list(account.followers.keys()) 
         for follower_id in current_follower_ids:
             follower_person = self.get_person(follower_id)
             if follower_person:
-                follower_person.add_received_article(article_id) # Add to front (deque)
+                follower_person.add_received_article(article_id) 
             else:
                  print(f"CHECKER WARNING: Follower {follower_id} not found when distributing article {article_id}", file=sys.stderr)
-
         return "Ok"
 
     def delete_article(self, person_id, account_id, article_id):
@@ -611,34 +595,38 @@ class NetworkSimulator:
 
          account = self.get_account(account_id)
 
-         if not account.contains_article(article_id): # Check if article exists IN THIS ACCOUNT
+         # JML: signals (ArticleIdNotFoundException e) ... !accounts.get(accountId).containsArticle(articleId);
+         # This means the article is not in THIS ACCOUNT's list of articles.
+         if not account.contains_article(article_id): 
              self._record_exception("ainf", article_id); return self._format_exception("ainf", article_id)
+         
          if account.owner_id != person_id:
-             self._record_exception("dapd", person_id, article_id); return self._format_exception("dapd", person_id, article_id) # Note: JML uses articleId for id2
+             self._record_exception("dapd", person_id, article_id); return self._format_exception("dapd", person_id, article_id)
 
-         # Find original contributor BEFORE removing from account
+         # Normal behavior:
+         # Get original contributor_id from global map. JML ensures article exists globally if in account.
          original_contributor_id = self.article_contributors.get(article_id)
          if original_contributor_id is None:
-              print(f"CHECKER WARNING: Article {article_id} contributor mapping missing during deletion.", file=sys.stderr)
-              # Decide how to proceed. Maybe skip contribution decrement?
-              # Let's assume the contributor exists for valid states.
+              # This indicates a severe inconsistency in checker state if reached,
+              # as an article in an account implies it was contributed and thus globally recorded.
+              print(f"CHECKER CRITICAL WARNING: Article {article_id} is in account {account_id} but no global contributor record found. State inconsistent.", file=sys.stderr)
+              # To attempt to proceed, we might assume the current person_id or handle error,
+              # but the JML model implies original_contributor_id is always retrievable.
+              # For safety, let's just proceed; OfficialAccountSimulator.remove_article will handle if contributor is a follower.
 
-         # Remove article from account and decrement contribution
+         # Remove article from the specific account's list and decrement original contributor's count in that account
          account.remove_article(article_id, original_contributor_id)
 
-         # Remove article from global records
-         self.articles.discard(article_id)
-         self.article_contributors.pop(article_id, None)
+         # DO NOT remove from global self.articles or self.article_contributors
+         # This was the BUG. JML assignable clause for NetworkInterface.deleteArticle does not allow modification of
+         # NetworkInterface.articles or NetworkInterface.articleContributors.
 
-         # Remove article from ALL current followers' received lists
-         # Potentially slow: O(num_followers * len(received_articles)) in worst case list removal
-         # O(num_followers * len(received_articles)) with deque recreation
-         current_follower_ids = list(account.followers.keys()) # Snapshot
+         # Remove article from received lists of ALL current followers of THIS account
+         current_follower_ids = list(account.followers.keys()) 
          for follower_id in current_follower_ids:
              follower_person = self.get_person(follower_id)
              if follower_person:
                  follower_person.remove_received_article(article_id)
-
          return "Ok"
 
     def follow_official_account(self, person_id, account_id):
@@ -648,15 +636,13 @@ class NetworkSimulator:
             self._record_exception("oainf", account_id); return self._format_exception("oainf", account_id)
 
         account = self.get_account(account_id)
-        person = self.get_person(person_id) # Not strictly needed by logic, but good practice
+        # person = self.get_person(person_id) # Not strictly needed for contains_follower
 
+        # JML: signals (EqualPersonIdException e) ... accounts.get(accountId).containsFollower(getPerson(personId));
         if account.contains_follower(person_id):
-            # JML uses EqualPersonIdException here
             self._record_exception("epi", person_id); return self._format_exception("epi", person_id)
 
-        # Add follower
         account.add_follower(person_id) # Sets contribution to 0
-
         return "Ok"
 
     def query_best_contributor(self, account_id):
@@ -672,12 +658,12 @@ class NetworkSimulator:
             self._record_exception("pinf", person_id); return self._format_exception("pinf", person_id)
 
         person = self.get_person(person_id)
-        articles_list = person.query_received_articles_list() # Gets first 5
+        articles_list = person.query_received_articles_list() 
 
         if not articles_list:
             return "None"
         else:
-            return " ".join(map(str, articles_list)) # Space separated
+            return " ".join(map(str, articles_list))
 
 
 # --- Main Checker Logic ---
@@ -708,184 +694,195 @@ def run_checker(stdin_path, stdout_path):
 
         command_num += 1
         cmd_line = input_lines[input_idx]
-        input_idx += 1
+        input_idx += 1 
         parts = cmd_line.split()
         if not parts: continue
         cmd = parts[0]
-        expected_output = "Checker_Error: Command not implemented" # Default placeholder
+        expected_output = "Checker_Error: Command not implemented" 
 
-        # --- Handle load_network specially ---
-        # (load_network logic remains the same as it relies on add_person/add_relation)
         if cmd in ("ln", "load_network", "lnl", "load_network_local"):
-             load_expected_output = "Ok"; load_actual_output = None
-             if output_idx >= len(output_lines): result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": load_expected_output, "actual": None, "reason": f"Missing output for {cmd}"}); break
-             load_actual_output = output_lines[output_idx]; output_idx += 1
-             if len(parts) < 2: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": None, "actual": load_actual_output, "reason": f"Malformed {cmd} command"}); break
+             load_expected_output_str = "Ok"; load_actual_output_str = None 
+             if output_idx >= len(output_lines): result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": load_expected_output_str, "actual": None, "reason": f"Missing output for {cmd}"}); break
+             load_actual_output_str = output_lines[output_idx]; output_idx += 1
+             if len(parts) < 2: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": None, "actual": load_actual_output_str, "reason": f"Malformed {cmd} command"}); break
              n_str = parts[1]; n = parse_int(n_str)
-             if n is None or n < 0: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": None, "actual": load_actual_output, "reason": f"Invalid count '{n_str}' in {cmd}"}); break
+             if n is None or n < 0: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": None, "actual": load_actual_output_str, "reason": f"Invalid count '{n_str}' in {cmd}"}); break
 
-             source_lines = []; source_idx_offset = 0; load_file_error = False
-             load_lines_needed = 0
-             if n > 0: # Calculate lines needed for relations (triangular matrix part)
-                 load_lines_needed = 3 + n # ids, names, ages, plus n relation lines
+             num_data_lines_for_load = 0
+             if n > 0:
+                 num_relation_lines = n - 1 
+                 num_data_lines_for_load = 3 + num_relation_lines 
 
+             source_lines_for_sim = []; source_idx_offset_for_sim = 0; load_file_error_flag = False 
+             
              if cmd in ("lnl", "load_network_local"):
-                  if len(parts) < 3: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": None, "actual": load_actual_output, "reason": f"Missing filename for {cmd}"}); break
+                  if len(parts) < 3: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": None, "actual": load_actual_output_str, "reason": f"Missing filename for {cmd}"}); break
                   filename = parts[2]
                   try:
-                       with open(filename, 'r', encoding='utf-8') as f_load: source_lines = [line.strip() for line in f_load if line.strip()]
-                       # Check if enough lines exist in the file for n > 0
-                       if n > 0 and len(source_lines) < load_lines_needed: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": None, "actual": load_actual_output, "reason": f"File {filename} insufficient data (expected {load_lines_needed} lines, got {len(source_lines)})"}); break
-                  except FileNotFoundError: load_file_error = True; load_expected_output = "File not found"
+                       with open(filename, 'r', encoding='utf-8') as f_load: source_lines_for_sim = [line.strip() for line in f_load if line.strip()]
+                       if n > 0 and len(source_lines_for_sim) < num_data_lines_for_load: 
+                           result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": None, "actual": load_actual_output_str, "reason": f"File {filename} insufficient data (expected {num_data_lines_for_load} lines, got {len(source_lines_for_sim)})"}); break
+                  except FileNotFoundError: load_file_error_flag = True; load_expected_output_str = "File not found"
                   except Exception as e: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "reason": f"Error reading load file {filename}: {e}"}); break
-             else: # ln
-                  # Check if enough lines remain in stdin for n > 0
-                  if n > 0 and input_idx + load_lines_needed -1 > len(input_lines): # -1 because cmd_line already read
-                      result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "reason": f"Insufficient lines in stdin for {cmd} {n} (expected {load_lines_needed})"}); break
+             else: 
                   if n > 0:
-                     source_lines = input_lines; source_idx_offset = input_idx; input_idx += load_lines_needed
+                      if (input_idx + num_data_lines_for_load > len(input_lines)):
+                          result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "reason": f"Insufficient lines in stdin for {cmd} {n} (expected {num_data_lines_for_load}, available {len(input_lines) - input_idx})"}); break
+                      source_lines_for_sim = input_lines
+                      source_idx_offset_for_sim = input_idx
+                      input_idx += num_data_lines_for_load 
 
-             if load_actual_output != load_expected_output: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": load_expected_output, "actual": load_actual_output, "reason": "Output mismatch for load command"}); break
-             if load_file_error: continue # Skip simulation if file not found (already matched output)
-             if n == 0: continue # Skip simulation if n=0 (already matched output)
+             if load_actual_output_str != load_expected_output_str: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": load_expected_output_str, "actual": load_actual_output_str, "reason": "Output mismatch for load command"}); break
+             if load_file_error_flag: continue 
+             if n == 0: continue 
 
-             # Simulate load for n > 0
              try:
-                  ids_line = source_lines[source_idx_offset].split(); names_line = source_lines[source_idx_offset + 1].split(); ages_line = source_lines[source_idx_offset + 2].split()
+                  ids_line = source_lines_for_sim[source_idx_offset_for_sim].split()
+                  names_line = source_lines_for_sim[source_idx_offset_for_sim + 1].split()
+                  ages_line = source_lines_for_sim[source_idx_offset_for_sim + 2].split()
+                  
                   if not (len(ids_line) == n and len(names_line) == n and len(ages_line) == n): raise ValueError("Mismatched counts in header lines")
                   ids = [parse_int(id_s) for id_s in ids_line]; names = names_line; ages = [parse_int(age_s) for age_s in ages_line]
                   if None in ids or None in ages: raise ValueError("Parse error IDs/Ages")
+                  
                   for i in range(n):
-                        sim_res = network.add_person(ids[i], names[i], ages[i]) # Simulate adding person
+                        sim_res = network.add_person(ids[i], names[i], ages[i]) 
                         if sim_res != "Ok": raise ValueError(f"Load Error: Failed adding person {ids[i]}: {sim_res}")
 
-                  current_data_line_idx = source_idx_offset + 3
-                  # Relation matrix reading (as per spec: row i has i values for relations with 0..i-1)
-                  for i in range(n): # Process relation line for person ids[i]
-                        if current_data_line_idx >= len(source_lines): raise ValueError(f"Missing relation line {i}")
-                        value_line = source_lines[current_data_line_idx].split()
-                        # Correction: Line i should have i values (connecting to 0..i-1)
-                        if len(value_line) != i: raise ValueError(f"Incorrect num values on relation line {i} (expected {i}, got {len(value_line)})")
-                        current_data_line_idx += 1
-                        for j in range(i): # Relates ids[i] with ids[j]
-                            value = parse_int(value_line[j])
-                            if value is None: raise ValueError(f"Invalid value on relation line {i}, column {j}")
-                            # Spec implies adding only if value != 0, but JML addRelation doesn't state this.
-                            # However, the input format description often implies non-zero means add.
-                            # Let's stick to adding if value != 0 as per common interpretation of this format.
+                  current_data_line_idx_in_source = source_idx_offset_for_sim + 3
+                  
+                  for line_k_idx in range(n - 1): 
+                        if current_data_line_idx_in_source >= len(source_lines_for_sim): 
+                            raise ValueError(f"Missing relation data: line block index {line_k_idx}")
+                        
+                        value_str_list = source_lines_for_sim[current_data_line_idx_in_source].split()
+                        current_data_line_idx_in_source += 1
+
+                        expected_num_values = line_k_idx + 1
+                        if len(value_str_list) != expected_num_values:
+                            raise ValueError(
+                                f"Incorrect number of values on relation line block index {line_k_idx} "
+                                f"(expected {expected_num_values}, got {len(value_str_list)})"
+                            )
+
+                        person1_actual_id = ids[line_k_idx + 1]
+
+                        for val_idx_on_line in range(expected_num_values): 
+                            person2_actual_id = ids[val_idx_on_line]
+                            
+                            value = parse_int(value_str_list[val_idx_on_line])
+                            if value is None:
+                                raise ValueError(
+                                    f"Invalid value on relation line block index {line_k_idx}, "
+                                    f"value index {val_idx_on_line}"
+                                )
+                            
                             if value != 0:
-                                sim_res = network.add_relation(ids[i], ids[j], value) # Simulate adding relation
-                                if sim_res != "Ok": raise ValueError(f"Load Error: Failed adding relation {ids[i]}-{ids[j]}: {sim_res}")
+                                sim_res = network.add_relation(person1_actual_id, person2_actual_id, value)
+                                if sim_res != "Ok":
+                                    raise ValueError(
+                                        f"Load Error: Failed adding relation {person1_actual_id}-{person2_actual_id}: {sim_res}"
+                                    )
              except Exception as e:
                   result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "reason": f"Checker error during load simulation: {type(e).__name__} {e}"}); break
-             continue # Move to next command
-
-        # --- Handle regular commands ---
+             continue 
+        
         actual_output = None
         if output_idx >= len(output_lines): result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": "???", "actual": None, "reason": "Missing output"}); break
         actual_output = output_lines[output_idx]; output_idx += 1
 
-        # Simulate command using NetworkSimulator methods
         try:
-            # --- HW8/9 Command dispatching ---
             if cmd in ("ap", "add_person") and len(parts) == 4:
                 id_val, name, age = parse_int(parts[1]), parts[2], parse_int(parts[3])
-                if id_val is None or age is None: raise ValueError("Bad arguments")
+                if id_val is None or age is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.add_person(id_val, name, age)
             elif cmd in ("ar", "add_relation") and len(parts) == 4:
                 id1, id2, val = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                if id1 is None or id2 is None or val is None: raise ValueError("Bad arguments")
+                if id1 is None or id2 is None or val is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.add_relation(id1, id2, val)
             elif cmd in ("mr", "modify_relation") and len(parts) == 4:
                  id1, id2, m_val = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                 if id1 is None or id2 is None or m_val is None: raise ValueError("Bad arguments")
+                 if id1 is None or id2 is None or m_val is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                  expected_output = network.modify_relation(id1, id2, m_val)
             elif cmd in ("qv", "query_value") and len(parts) == 3:
                 id1, id2 = parse_int(parts[1]), parse_int(parts[2])
-                if id1 is None or id2 is None: raise ValueError("Bad arguments")
+                if id1 is None or id2 is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.query_value(id1, id2)
             elif cmd in ("qci", "query_circle") and len(parts) == 3:
                 id1, id2 = parse_int(parts[1]), parse_int(parts[2])
-                if id1 is None or id2 is None: raise ValueError("Bad arguments")
+                if id1 is None or id2 is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.is_circle(id1, id2)
             elif cmd in ("qts", "query_triple_sum") and len(parts) == 1:
                 expected_output = network.query_triple_sum()
             elif cmd in ("at", "add_tag") and len(parts) == 3:
                  p_id, t_id = parse_int(parts[1]), parse_int(parts[2])
-                 if p_id is None or t_id is None: raise ValueError("Bad arguments")
+                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                  expected_output = network.add_tag(p_id, t_id)
             elif cmd in ("att", "add_to_tag") and len(parts) == 4:
                  id1, id2, t_id = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                 if id1 is None or id2 is None or t_id is None: raise ValueError("Bad arguments")
+                 if id1 is None or id2 is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                  expected_output = network.add_person_to_tag(id1, id2, t_id)
             elif cmd in ("qtvs", "query_tag_value_sum") and len(parts) == 3:
                  p_id, t_id = parse_int(parts[1]), parse_int(parts[2])
-                 if p_id is None or t_id is None: raise ValueError("Bad arguments")
+                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                  expected_output = network.query_tag_value_sum(p_id, t_id)
             elif cmd in ("qtav", "query_tag_age_var") and len(parts) == 3:
                  p_id, t_id = parse_int(parts[1]), parse_int(parts[2])
-                 if p_id is None or t_id is None: raise ValueError("Bad arguments")
+                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                  expected_output = network.query_tag_age_var(p_id, t_id)
             elif cmd in ("dft", "del_from_tag") and len(parts) == 4:
                  id1, id2, t_id = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                 if id1 is None or id2 is None or t_id is None: raise ValueError("Bad arguments")
+                 if id1 is None or id2 is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                  expected_output = network.del_person_from_tag(id1, id2, t_id)
             elif cmd in ("dt", "del_tag") and len(parts) == 3:
                  p_id, t_id = parse_int(parts[1]), parse_int(parts[2])
-                 if p_id is None or t_id is None: raise ValueError("Bad arguments")
+                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                  expected_output = network.del_tag(p_id, t_id)
             elif cmd in ("qba", "query_best_acquaintance") and len(parts) == 2:
                 id_val = parse_int(parts[1])
-                if id_val is None: raise ValueError("Bad arguments")
+                if id_val is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.query_best_acquaintance(id_val)
             elif cmd in ("qcs", "query_couple_sum") and len(parts) == 1:
                 expected_output = network.query_couple_sum()
             elif cmd in ("qsp", "query_shortest_path") and len(parts) == 3:
                 id1, id2 = parse_int(parts[1]), parse_int(parts[2])
-                if id1 is None or id2 is None: raise ValueError("Bad arguments")
+                if id1 is None or id2 is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.query_shortest_path(id1, id2)
-
-            # --- HW10 Command dispatching ---
             elif cmd in ("coa", "create_official_account") and len(parts) == 4:
                 p_id, acc_id, name_str = parse_int(parts[1]), parse_int(parts[2]), parts[3]
-                if p_id is None or acc_id is None: raise ValueError("Bad arguments")
+                if p_id is None or acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.create_official_account(p_id, acc_id, name_str)
             elif cmd in ("doa", "delete_official_account") and len(parts) == 3:
                 p_id, acc_id = parse_int(parts[1]), parse_int(parts[2])
-                if p_id is None or acc_id is None: raise ValueError("Bad arguments")
+                if p_id is None or acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.delete_official_account(p_id, acc_id)
             elif cmd in ("ca", "contribute_article") and len(parts) == 4:
                 p_id, acc_id, art_id = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                if p_id is None or acc_id is None or art_id is None: raise ValueError("Bad arguments")
+                if p_id is None or acc_id is None or art_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.contribute_article(p_id, acc_id, art_id)
             elif cmd in ("da", "delete_article") and len(parts) == 4:
                 p_id, acc_id, art_id = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                if p_id is None or acc_id is None or art_id is None: raise ValueError("Bad arguments")
+                if p_id is None or acc_id is None or art_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.delete_article(p_id, acc_id, art_id)
             elif cmd in ("foa", "follow_official_account") and len(parts) == 3:
                 p_id, acc_id = parse_int(parts[1]), parse_int(parts[2])
-                if p_id is None or acc_id is None: raise ValueError("Bad arguments")
+                if p_id is None or acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.follow_official_account(p_id, acc_id)
             elif cmd in ("qbc", "query_best_contributor") and len(parts) == 2:
                 acc_id = parse_int(parts[1])
-                if acc_id is None: raise ValueError("Bad arguments")
+                if acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.query_best_contributor(acc_id)
             elif cmd in ("qra", "query_received_articles") and len(parts) == 2:
                 p_id = parse_int(parts[1])
-                if p_id is None: raise ValueError("Bad arguments")
+                if p_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.query_received_articles(p_id)
-
-            # --- Unknown Command ---
             else:
                  raise ValueError(f"Unknown or malformed command: '{cmd_line}'")
 
-        except ValueError as e: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "reason": f"Checker Error: Invalid args/cmd: {e}"}); break
+        except ValueError as e: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "reason": f"Checker Error: Invalid args/cmd processing: {e}"}); break
         except Exception as e: result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "reason": f"Checker Error: Simulation Error: {type(e).__name__} {e}"}); break
 
-        # Compare expected vs actual
-        # Special handling for qra space-separated output vs possible single "None"
         if cmd in ("qra", "query_received_articles"):
-             # Normalize whitespace for comparison
              norm_expected = " ".join(expected_output.split())
              norm_actual = " ".join(actual_output.split())
              if norm_actual != norm_expected:
@@ -893,11 +890,9 @@ def run_checker(stdin_path, stdout_path):
         elif actual_output != expected_output:
              result_status = "Rejected"; error_details.append({"command_number": command_num, "command": cmd_line, "expected": expected_output, "actual": actual_output, "reason": "Output mismatch"}); break
 
-    # Final Check for Extra Output
     if result_status == "Accepted" and output_idx < len(output_lines):
         result_status = "Rejected"; error_details.append({"command_number": command_num + 1, "reason": "Extra output", "actual": output_lines[output_idx]})
 
-    # Output JSON Result
     final_result = {"result": result_status, "errors": error_details}
     print(json.dumps(final_result, indent=4, ensure_ascii=False))
 
