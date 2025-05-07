@@ -386,10 +386,6 @@ class NetworkSimulator:
             if not p1: continue 
             for j in range(len(person_ids_in_tag)): 
                 p2_id = person_ids_in_tag[j]
-                # p1.query_value(p2_id) handles cases:
-                # - p1_id == p2_id (returns 0)
-                # - p1_id != p2_id and linked (returns value)
-                # - p1_id != p2_id and not linked (returns 0)
                 value_sum += p1.query_value(p2_id) 
         return str(value_sum)
 
@@ -402,13 +398,12 @@ class NetworkSimulator:
         person_ids_in_tag = tag.get_person_ids() 
         ages = []
         for pid in person_ids_in_tag: 
-            p_obj = self.get_person(pid) # Renamed p to p_obj to avoid conflict
+            p_obj = self.get_person(pid)
             if p_obj: ages.append(p_obj.age)
         age_var = calculate_age_var(ages) 
         return str(age_var)
 
     def del_person_from_tag(self, person_id1, person_id2, tag_id):
-        # person_id1 to be deleted, person_id2 owns the tag
         if not self.contains_person(person_id1): self._record_exception("pinf", person_id1); return self._format_exception("pinf", person_id1)
         if not self.contains_person(person_id2): self._record_exception("pinf", person_id2); return self._format_exception("pinf", person_id2)
         
@@ -416,8 +411,6 @@ class NetworkSimulator:
         if not person2.contains_tag(tag_id): self._record_exception("tinf", tag_id); return self._format_exception("tinf", tag_id)
         
         tag = person2.get_tag(tag_id)
-        # JML: signals (PersonIdNotFoundException e) ... !getTag(tagId).hasPerson(getPerson(personId1));
-        # This implies if person1 is NOT in the tag, it's a PersonIdNotFoundException for personId1.
         if not tag.has_person(person_id1): 
             self._record_exception("pinf", person_id1); return self._format_exception("pinf", person_id1)
         
@@ -434,11 +427,9 @@ class NetworkSimulator:
     def query_best_acquaintance(self, person_id):
         if not self.contains_person(person_id): self._record_exception("pinf", person_id); return self._format_exception("pinf", person_id)
         person = self.get_person(person_id)
-        acquaintances = person.get_acquaintance_ids_and_values() # list of (id, value) tuples
+        acquaintances = person.get_acquaintance_ids_and_values()
         if not acquaintances: self._record_exception("anf", person_id); return self._format_exception("anf", person_id)
         
-        # JML: min bestId such that value is maximal.
-        # So, find max value first, then find min ID among those with max value.
         max_val = -float('inf')
         for _, val in acquaintances:
             if val > max_val:
@@ -448,26 +439,20 @@ class NetworkSimulator:
         for acq_id, val in acquaintances:
              if val == max_val: 
                  best_id = min(best_id, acq_id)
-        return str(int(best_id)) # Should always find one if acquaintances is not empty
+        return str(int(best_id))
 
     def query_couple_sum(self):
         count = 0
         person_ids = list(self.persons.keys()) 
-        
-        # To avoid double counting, only consider (id1, id2) where id1 < id2
-        # The JML sum is over i < j.
-        # The condition is qba(persons[i].id) == persons[j].id AND qba(persons[j].id) == persons[i].id
-
-        # Precompute all best acquaintances to optimize
         best_acquaintances_map = {}
         for pid in person_ids:
             person = self.get_person(pid)
             if not person or not person.acquaintance:
-                best_acquaintances_map[pid] = None # No best acquaintance or no acquaintances
+                best_acquaintances_map[pid] = None
                 continue
             
             acquaintances = person.get_acquaintance_ids_and_values()
-            if not acquaintances: # Should be caught by person.acquaintance check
+            if not acquaintances:
                 best_acquaintances_map[pid] = None
                 continue
 
@@ -485,7 +470,7 @@ class NetworkSimulator:
             qba_id1 = best_acquaintances_map.get(id1)
             if qba_id1 is None: continue
 
-            for j in range(i + 1, len(person_ids)): # Ensure id1 < id2 concept (p[i] < p[j])
+            for j in range(i + 1, len(person_ids)):
                 id2 = person_ids[j]
                 qba_id2 = best_acquaintances_map.get(id2)
                 if qba_id2 is None: continue
@@ -521,7 +506,7 @@ class NetworkSimulator:
     def get_account(self, account_id):
         return self.accounts.get(account_id)
 
-    def contains_article(self, article_id): # This checks global Network.articles
+    def contains_article(self, article_id):
         return article_id in self.articles
 
     def create_official_account(self, person_id, account_id, name):
@@ -532,7 +517,7 @@ class NetworkSimulator:
 
         new_account = OfficialAccountSimulator(account_id, person_id, name)
         self.accounts[account_id] = new_account
-        new_account.add_follower(person_id) # Owner becomes a follower with 0 contribution
+        new_account.add_follower(person_id)
         return "Ok"
 
     def delete_official_account(self, person_id, account_id):
@@ -545,9 +530,6 @@ class NetworkSimulator:
         if account.owner_id != person_id:
             self._record_exception("doapd", person_id, account_id); return self._format_exception("doapd", person_id, account_id)
         
-        # JML assignable is only 'accounts'. It does not say to delete articles from global list,
-        # or from person's received lists if they were following this account.
-        # Strict interpretation: just remove the account object from the network's map.
         del self.accounts[account_id]
         return "Ok"
 
@@ -557,27 +539,17 @@ class NetworkSimulator:
         if not self.contains_account(account_id):
             self._record_exception("oainf", account_id); return self._format_exception("oainf", account_id)
         
-        # JML: signals (EqualArticleIdException e) ... containsArticle(articleId);
-        # containsArticle here refers to NetworkInterface.containsArticle (global)
         if self.contains_article(article_id): 
             self._record_exception("eai", article_id); return self._format_exception("eai", article_id)
 
         account = self.get_account(account_id)
-        # person = self.get_person(person_id) # Not strictly needed for contains_follower if person_id is used
-
-        # JML: signals (ContributePermissionDeniedException e) ... !accounts.get(accountId).containsFollower(getPerson(personId));
         if not account.contains_follower(person_id):
             self._record_exception("cpd", person_id, article_id); return self._format_exception("cpd", person_id, article_id) 
 
-        # Normal behavior:
-        self.articles.add(article_id) # Add to global Network.articles
-        self.article_contributors[article_id] = person_id # Record global contributor
-
-        # Add to account's articles and update contribution
-        # OfficialAccountSimulator.add_article handles its internal 'articles' set and 'followers' contributions
+        self.articles.add(article_id)
+        self.article_contributors[article_id] = person_id
         account.add_article(person_id, article_id) 
 
-        # Add article to received list of ALL current followers of this account
         current_follower_ids = list(account.followers.keys()) 
         for follower_id in current_follower_ids:
             follower_person = self.get_person(follower_id)
@@ -594,34 +566,16 @@ class NetworkSimulator:
              self._record_exception("oainf", account_id); return self._format_exception("oainf", account_id)
 
          account = self.get_account(account_id)
-
-         # JML: signals (ArticleIdNotFoundException e) ... !accounts.get(accountId).containsArticle(articleId);
-         # This means the article is not in THIS ACCOUNT's list of articles.
          if not account.contains_article(article_id): 
              self._record_exception("ainf", article_id); return self._format_exception("ainf", article_id)
          
          if account.owner_id != person_id:
              self._record_exception("dapd", person_id, article_id); return self._format_exception("dapd", person_id, article_id)
 
-         # Normal behavior:
-         # Get original contributor_id from global map. JML ensures article exists globally if in account.
          original_contributor_id = self.article_contributors.get(article_id)
          if original_contributor_id is None:
-              # This indicates a severe inconsistency in checker state if reached,
-              # as an article in an account implies it was contributed and thus globally recorded.
               print(f"CHECKER CRITICAL WARNING: Article {article_id} is in account {account_id} but no global contributor record found. State inconsistent.", file=sys.stderr)
-              # To attempt to proceed, we might assume the current person_id or handle error,
-              # but the JML model implies original_contributor_id is always retrievable.
-              # For safety, let's just proceed; OfficialAccountSimulator.remove_article will handle if contributor is a follower.
-
-         # Remove article from the specific account's list and decrement original contributor's count in that account
          account.remove_article(article_id, original_contributor_id)
-
-         # DO NOT remove from global self.articles or self.article_contributors
-         # This was the BUG. JML assignable clause for NetworkInterface.deleteArticle does not allow modification of
-         # NetworkInterface.articles or NetworkInterface.articleContributors.
-
-         # Remove article from received lists of ALL current followers of THIS account
          current_follower_ids = list(account.followers.keys()) 
          for follower_id in current_follower_ids:
              follower_person = self.get_person(follower_id)
@@ -636,13 +590,10 @@ class NetworkSimulator:
             self._record_exception("oainf", account_id); return self._format_exception("oainf", account_id)
 
         account = self.get_account(account_id)
-        # person = self.get_person(person_id) # Not strictly needed for contains_follower
-
-        # JML: signals (EqualPersonIdException e) ... accounts.get(accountId).containsFollower(getPerson(personId));
         if account.contains_follower(person_id):
             self._record_exception("epi", person_id); return self._format_exception("epi", person_id)
 
-        account.add_follower(person_id) # Sets contribution to 0
+        account.add_follower(person_id)
         return "Ok"
 
     def query_best_contributor(self, account_id):
@@ -792,90 +743,89 @@ def run_checker(stdin_path, stdout_path):
         actual_output = output_lines[output_idx]; output_idx += 1
 
         try:
-            if cmd in ("ap", "add_person") and len(parts) == 4:
+            if cmd in ("ap", "add_person") and len(parts) >= 4: # 3 args: id, name, age
                 id_val, name, age = parse_int(parts[1]), parts[2], parse_int(parts[3])
-                if id_val is None or age is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if id_val is None or age is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:4]}")
                 expected_output = network.add_person(id_val, name, age)
-            elif cmd in ("ar", "add_relation") and len(parts) == 4:
+            elif cmd in ("ar", "add_relation") and len(parts) >= 4: # 3 args: id1, id2, value
                 id1, id2, val = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                if id1 is None or id2 is None or val is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if id1 is None or id2 is None or val is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:4]}")
                 expected_output = network.add_relation(id1, id2, val)
-            elif cmd in ("mr", "modify_relation") and len(parts) == 4:
+            elif cmd in ("mr", "modify_relation") and len(parts) >= 4: # 3 args: id1, id2, value
                  id1, id2, m_val = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                 if id1 is None or id2 is None or m_val is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                 if id1 is None or id2 is None or m_val is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:4]}")
                  expected_output = network.modify_relation(id1, id2, m_val)
-            elif cmd in ("qv", "query_value") and len(parts) == 3:
+            elif cmd in ("qv", "query_value") and len(parts) >= 3: # 2 args: id1, id2
                 id1, id2 = parse_int(parts[1]), parse_int(parts[2])
-                if id1 is None or id2 is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if id1 is None or id2 is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:3]}")
                 expected_output = network.query_value(id1, id2)
-            elif cmd in ("qci", "query_circle") and len(parts) == 3:
+            elif cmd in ("qci", "query_circle") and len(parts) >= 3: # 2 args: id1, id2
                 id1, id2 = parse_int(parts[1]), parse_int(parts[2])
-                if id1 is None or id2 is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if id1 is None or id2 is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:3]}")
                 expected_output = network.is_circle(id1, id2)
-            elif cmd in ("qts", "query_triple_sum") and len(parts) == 1:
+            elif cmd in ("qts", "query_triple_sum") and len(parts) >= 1: # 0 args
                 expected_output = network.query_triple_sum()
-            elif cmd in ("at", "add_tag") and len(parts) == 3:
+            elif cmd in ("at", "add_tag") and len(parts) >= 3: # 2 args: person_id, tag_id
                  p_id, t_id = parse_int(parts[1]), parse_int(parts[2])
-                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:3]}")
                  expected_output = network.add_tag(p_id, t_id)
-            elif cmd in ("att", "add_to_tag") and len(parts) == 4:
+            elif cmd in ("att", "add_to_tag") and len(parts) >= 4: # 3 args: id1, id2, tag_id
                  id1, id2, t_id = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                 if id1 is None or id2 is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                 if id1 is None or id2 is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:4]}")
                  expected_output = network.add_person_to_tag(id1, id2, t_id)
-            elif cmd in ("qtvs", "query_tag_value_sum") and len(parts) == 3:
+            elif cmd in ("qtvs", "query_tag_value_sum") and len(parts) >= 3: # 2 args: person_id, tag_id
                  p_id, t_id = parse_int(parts[1]), parse_int(parts[2])
-                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:3]}")
                  expected_output = network.query_tag_value_sum(p_id, t_id)
-            elif cmd in ("qtav", "query_tag_age_var") and len(parts) == 3:
+            elif cmd in ("qtav", "query_tag_age_var") and len(parts) >= 3: # 2 args: person_id, tag_id
                  p_id, t_id = parse_int(parts[1]), parse_int(parts[2])
-                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:3]}")
                  expected_output = network.query_tag_age_var(p_id, t_id)
-            elif cmd in ("dft", "del_from_tag") and len(parts) == 4:
+            elif cmd in ("dft", "del_from_tag") and len(parts) >= 4: # 3 args: id1, id2, tag_id
                  id1, id2, t_id = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                 if id1 is None or id2 is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                 if id1 is None or id2 is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:4]}")
                  expected_output = network.del_person_from_tag(id1, id2, t_id)
-            elif cmd in ("dt", "del_tag") and len(parts) == 3:
+            elif cmd in ("dt", "del_tag") and len(parts) >= 3: # 2 args: person_id, tag_id
                  p_id, t_id = parse_int(parts[1]), parse_int(parts[2])
-                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                 if p_id is None or t_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:3]}")
                  expected_output = network.del_tag(p_id, t_id)
-            elif cmd in ("qba", "query_best_acquaintance") and len(parts) == 2:
+            elif cmd in ("qba", "query_best_acquaintance") and len(parts) >= 2: # 1 arg: id
                 id_val = parse_int(parts[1])
-                if id_val is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if id_val is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:2]}")
                 expected_output = network.query_best_acquaintance(id_val)
-            elif cmd in ("qcs", "query_couple_sum") and len(parts) == 1:
+            elif cmd in ("qcs", "query_couple_sum") and len(parts) >= 1: # 0 args
                 expected_output = network.query_couple_sum()
-            elif cmd in ("qsp", "query_shortest_path") and len(parts) == 3:
+            elif cmd in ("qsp", "query_shortest_path") and len(parts) >= 3: # 2 args: id1, id2
                 id1, id2 = parse_int(parts[1]), parse_int(parts[2])
-                if id1 is None or id2 is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if id1 is None or id2 is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:3]}")
                 expected_output = network.query_shortest_path(id1, id2)
-            elif cmd in ("coa", "create_official_account") and len(parts) == 4:
+            elif cmd in ("coa", "create_official_account") and len(parts) >= 4: # 3 args: p_id, acc_id, name_str
                 p_id, acc_id, name_str = parse_int(parts[1]), parse_int(parts[2]), parts[3]
-                if p_id is None or acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if p_id is None or acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:3]}") # Name is string, no parse check
                 expected_output = network.create_official_account(p_id, acc_id, name_str)
-            elif cmd in ("doa", "delete_official_account") and len(parts) == 3:
+            elif cmd in ("doa", "delete_official_account") and len(parts) >= 3: # 2 args: p_id, acc_id
                 p_id, acc_id = parse_int(parts[1]), parse_int(parts[2])
-                if p_id is None or acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if p_id is None or acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:3]}")
                 expected_output = network.delete_official_account(p_id, acc_id)
-            elif cmd in ("ca", "contribute_article") and len(parts) >= 4: # 修改点 1: == 4 改为 >= 4
+            elif cmd in ("ca", "contribute_article") and len(parts) >= 4: # 3 args: p_id, acc_id, art_id (name ignored)
                 p_id, acc_id, art_id = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                # parts[4] (if exists) is the article name/content, which is ignored by the JML spec.
-                if p_id is None or acc_id is None or art_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:4]}") # 修改点 2: parts[1:] 改为 parts[1:4] (可选优化)
+                if p_id is None or acc_id is None or art_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:4]}")
                 expected_output = network.contribute_article(p_id, acc_id, art_id)
-            elif cmd in ("da", "delete_article") and len(parts) == 4:
+            elif cmd in ("da", "delete_article") and len(parts) >= 4: # 3 args: p_id, acc_id, art_id
                 p_id, acc_id, art_id = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                if p_id is None or acc_id is None or art_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if p_id is None or acc_id is None or art_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:4]}")
                 expected_output = network.delete_article(p_id, acc_id, art_id)
-            elif cmd in ("foa", "follow_official_account") and len(parts) == 3:
+            elif cmd in ("foa", "follow_official_account") and len(parts) >= 3: # 2 args: p_id, acc_id
                 p_id, acc_id = parse_int(parts[1]), parse_int(parts[2])
-                if p_id is None or acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if p_id is None or acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:3]}")
                 expected_output = network.follow_official_account(p_id, acc_id)
-            elif cmd in ("qbc", "query_best_contributor") and len(parts) == 2:
+            elif cmd in ("qbc", "query_best_contributor") and len(parts) >= 2: # 1 arg: acc_id
                 acc_id = parse_int(parts[1])
-                if acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:2]}")
                 expected_output = network.query_best_contributor(acc_id)
-            elif cmd in ("qra", "query_received_articles") and len(parts) == 2:
+            elif cmd in ("qra", "query_received_articles") and len(parts) >= 2: # 1 arg: p_id
                 p_id = parse_int(parts[1])
-                if p_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                if p_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:2]}")
                 expected_output = network.query_received_articles(p_id)
             else:
                  raise ValueError(f"Unknown or malformed command: '{cmd_line}'")
