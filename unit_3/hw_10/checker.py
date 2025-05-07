@@ -856,9 +856,10 @@ def run_checker(stdin_path, stdout_path):
                 p_id, acc_id = parse_int(parts[1]), parse_int(parts[2])
                 if p_id is None or acc_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
                 expected_output = network.delete_official_account(p_id, acc_id)
-            elif cmd in ("ca", "contribute_article") and len(parts) == 4:
+            elif cmd in ("ca", "contribute_article") and len(parts) >= 4: # 修改点 1: == 4 改为 >= 4
                 p_id, acc_id, art_id = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
-                if p_id is None or acc_id is None or art_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:]}")
+                # parts[4] (if exists) is the article name/content, which is ignored by the JML spec.
+                if p_id is None or acc_id is None or art_id is None: raise ValueError(f"Bad arguments for {cmd}: {parts[1:4]}") # 修改点 2: parts[1:] 改为 parts[1:4] (可选优化)
                 expected_output = network.contribute_article(p_id, acc_id, art_id)
             elif cmd in ("da", "delete_article") and len(parts) == 4:
                 p_id, acc_id, art_id = parse_int(parts[1]), parse_int(parts[2]), parse_int(parts[3])
