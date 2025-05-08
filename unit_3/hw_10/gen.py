@@ -1028,9 +1028,9 @@ def try_generate_exception_command(cmd_type, max_person_id, max_tag_id, max_acco
         elif cmd_type == "doa":
              choice = random.random()
              if choice < 0.3: 
-                 p_id = get_non_existent_person_id(max_person_id)
-                 acc_id = get_random_account_id()
-                 if p_id is not None and p_id != -1 and acc_id is not None:
+                p_id = get_non_existent_person_id(max_person_id)
+                acc_id = get_random_account_id()
+                if p_id is not None and p_id != -1 and acc_id is not None:
                       cmd = f"doa {p_id} {acc_id}"; target_exception = "PersonIdNotFoundException (doa PINF)"
              elif choice < 0.6: 
                   p_id = get_existing_person_id()
@@ -1050,26 +1050,30 @@ def try_generate_exception_command(cmd_type, max_person_id, max_tag_id, max_acco
                  p_id = get_non_existent_person_id(max_person_id)
                  acc_id = get_random_account_id()
                  art_id = get_non_existent_article_id(max_article_id)
+                 name = generate_name(art_id if art_id != -1 else 0, "Art")
                  if p_id is not None and p_id != -1 and acc_id is not None and art_id != -1:
-                      cmd = f"ca {p_id} {acc_id} {art_id}"; target_exception = "PersonIdNotFoundException (ca PINF)"
+                      cmd = f"ca {p_id} {acc_id} {art_id} {name}"; target_exception = "PersonIdNotFoundException (ca PINF)"
              elif choice < 0.4: 
                   p_id = get_existing_person_id()
                   acc_id = get_non_existent_account_id(max_account_id)
                   art_id = get_non_existent_article_id(max_article_id)
+                  name = generate_name(art_id if art_id != -1 else 0, "Art")
                   if p_id is not None and acc_id is not None and acc_id != -1 and art_id != -1:
-                       cmd = f"ca {p_id} {acc_id} {art_id}"; target_exception = "OfficialAccountIdNotFoundException (ca OAINF)"
+                       cmd = f"ca {p_id} {acc_id} {art_id} {name}"; target_exception = "OfficialAccountIdNotFoundException (ca OAINF)"
              elif choice < 0.6: 
                   acc_id, follower_id = get_random_account_and_follower() 
                   art_id_existing = get_random_article_id() 
+                  name = generate_name(art_id_existing if art_id_existing != -1 else 0, "Art")
                   if follower_id is not None and acc_id is not None and art_id_existing is not None:
-                       cmd = f"ca {follower_id} {acc_id} {art_id_existing}"; target_exception = "EqualArticleIdException (ca EAI)"
+                       cmd = f"ca {follower_id} {acc_id} {art_id_existing} {name}"; target_exception = "EqualArticleIdException (ca EAI)"
              else: 
                   acc_id = get_random_account_id()
                   art_id = get_non_existent_article_id(max_article_id)
+                  name = generate_name(art_id if art_id != -1 else 0, "Art")
                   if acc_id is not None and art_id != -1:
                       p_id_not_follower = get_person_not_following(acc_id)
                       if p_id_not_follower is not None:
-                           cmd = f"ca {p_id_not_follower} {acc_id} {art_id}"; target_exception = "ContributePermissionDeniedException (ca CPD)"
+                           cmd = f"ca {p_id_not_follower} {acc_id} {art_id} {name}"; target_exception = "ContributePermissionDeniedException (ca CPD)"
         elif cmd_type == "da":
              choice = random.random()
              if choice < 0.2: 
@@ -1407,8 +1411,9 @@ def generate_commands(num_commands_target, max_person_id, max_tag_id, max_accoun
                              follower_id_ca = random.choice(eligible_followers_ca)
                              article_id_ca = get_non_existent_article_id(max_article_id)
                              if article_id_ca != -1 and article_id_ca <= max_article_id:
+                                 name_ca = generate_name(article_id_ca, "Art")
                                  if contribute_article_state(follower_id_ca, acc_id_ca, article_id_ca):
-                                      cmd = f"ca {follower_id_ca} {acc_id_ca} {article_id_ca}"; generated_successfully = True
+                                      cmd = f"ca {follower_id_ca} {acc_id_ca} {article_id_ca} {name_ca}"; generated_successfully = True
                 elif cmd_type == "da":
                      acc_id_da, art_id_da = get_random_account_and_article()
                      if acc_id_da is not None and art_id_da is not None:
