@@ -20,6 +20,7 @@ update:
   target_line_prefix: 'Input Data File Path:'
 test:
   hce: False
+  custom: False      # 使用同目录下std.jar进行对拍
   parallel: 16
   debug: False
   cleanup: True

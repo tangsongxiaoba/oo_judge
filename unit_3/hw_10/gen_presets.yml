@@ -95,6 +95,45 @@
 # Test Case Q-QTVS-HCE-MUTUAL: Stress qtvs within typical HCE mutual test constraints.
 - gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 3000 --max_person_id 99 --max_rel_value 180 --density 0.3 --tag_focus 0.8 --account_focus 0.02 --max_tag_id 5 --max_tag_size 80 --hub_bias 0.7 --num_hubs 1 --phases build_hub_rels:800,setup_hub_tag:5,fill_hub_tag:1000,query_qtvs_heavy:1195 --min_qtvs 300 --exception_ratio 0.04
 
+# Test Case 1: HCE_Mutual_QCS_ExtremelyDense
+# Stress `queryCoupleSum` in an extremely dense graph with frequent relation modifications.
+- gen.py --hce --use_ln_setup --ln_nodes 99 --ln_default_value 10 -n 3000 --max_person_id 99 --density 0.9 --phases build:1000,modify_rels:1000,query:1000 --min_qcs 350 --min_qba 100 --mr_delete_ratio 0.3 --exception_ratio 0.1 --approx
+
+# Test Case 2: HCE_Mutual_QTVS_OneHugeCliqueTag
+# Stress `queryTagValueSum` with one massive tag (all persons), forming a clique within.
+- gen.py --hce --use_ln_setup --ln_nodes 99 --ln_default_value 10 -n 3000 --max_person_id 99 --density 0.9 --tag_focus 0.9 --account_focus 0.01 --max_tag_id 0 --max_tag_size 99 --phases build:1200,setup_hub_tag:20,fill_hub_tag:800,query_qtvs_heavy:980 --min_qtvs 400 --exception_ratio 0.05 --approx
+
+# Test Case 3: HCE_Mutual_QTVS_DenseTags_DenseRels
+# Stress `queryTagValueSum` with multiple dense tags and dense relations among their members, with churn.
+- gen.py --hce --use_ln_setup --ln_nodes 99 --ln_default_value 10 -n 3000 --max_person_id 99 --density 0.7 --tag_focus 0.8 --account_focus 0.05 --max_tag_id 3 --max_tag_size 80 --phases build:700,fill_many_tags:800,dynamic_qtvs_churn:1500 --min_qtvs 300 --mr_delete_ratio 0.4 --exception_ratio 0.1 --approx
+
+# Test Case 4: HCE_Mutual_AccountArticle_MaxChurn
+# Stress account/article creation/deletion, focusing on `qbc` and `qra` under heavy churn.
+- gen.py --hce --use_ln_setup --ln_nodes 99 --ln_default_value 10 -n 3000 --max_person_id 99 --density 0.15 --account_focus 0.8 --tag_focus 0.05 --max_account_id 20 --max_article_id 300 --phases build:400,build_accounts_articles:1000,delete_churn:1000,query:600 --min_qbc 150 --min_qra 150 --exception_ratio 0.15
+
+# Test Case 5: HCE_Mutual_QSP_DenseChallenging
+# Stress `queryShortestPath` in a dense graph where many paths likely exist.
+- gen.py --hce --use_ln_setup --ln_nodes 99 --ln_default_value 10 -n 3000 --max_person_id 99 --density 0.75 --phases build:1500,query:1500 --min_qsp 500 --qci_focus mixed --exception_ratio 0.1 --approx
+
+# Test Case 6: HCE_Mutual_QSP_SparseChallenging_PNF
+# Stress `queryShortestPath` in a sparse graph, likely to trigger PathNotFoundExceptions.
+- gen.py --hce --use_ln_setup --ln_nodes 99 --ln_default_value 10 -n 2800 --max_person_id 99 --density 0.04 --phases build:1400,query:1400 --min_qsp 500 --qci_focus far --exception_ratio 0.25
+
+# Test Case 7: HCE_Mutual_FullClique_QTS_QCS
+# Build a graph as close to a clique as possible, then heavily query `qts` and `qcs`.
+- gen.py --hce --use_ln_setup --ln_nodes 99 --ln_default_value 5 -n 3000 --max_person_id 99 --density 0.98 --phases build:2000,query:1000 --min_qts 250 --min_qcs 250 --exception_ratio 0.05 --approx
+
+# Test Case 8: HCE_Mutual_MR_Delete_Storm_Impact
+# Focus on `mr` commands that delete relations, observe impact on `qcs`, `qtvs`, and tag integrity.
+- gen.py --hce --use_ln_setup --ln_nodes 99 --ln_default_value 10 -n 3000 --max_person_id 99 --density 0.6 --tag_focus 0.5 --account_focus 0.1 --max_tag_id 4 --max_tag_size 70 --phases build:700,fill_many_tags:500,modify_rels:1200,query:600 --min_qtvs 100 --min_qcs 100 --mr_delete_ratio 0.7 --exception_ratio 0.1 --approx
+
+# Test Case 9: HCE_Mutual_TagMembership_HeavyChurn_QTVS
+# Focus on frequent add/remove of members to/from tags, then query `qtvs`.
+- gen.py --hce --use_ln_setup --ln_nodes 99 --ln_default_value 10 -n 3000 --max_person_id 99 --density 0.45 --tag_focus 0.75 --account_focus 0.05 --max_tag_id 5 --max_tag_size 60 --phases build:600,modify_tags:1600,query:800 --min_qtvs 300 --min_qtav 50 --exception_ratio 0.1
+
+# Test Case 10: HCE_Mutual_AllExceptions_Focus
+# Maximize chances for various exceptions across all command types.
+- gen.py --hce --use_ln_setup --ln_nodes 99 --ln_default_value 10 -n 2500 --max_person_id 99 --density 0.25 --tag_focus 0.33 --account_focus 0.33 --max_tag_id 5 --max_account_id 10 --max_article_id 50 --phases build:500,modify:1500,query:500 --exception_ratio 0.6
 # --- Non-HCE Presets (符合公测限制: N<=10000, val<=200) ---
 
 # Test Case 9: Large Scale Account/Article Churn (Public)

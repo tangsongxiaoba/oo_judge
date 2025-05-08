@@ -46,6 +46,8 @@ class JarTester:
     _jar_dir = ""
     _gen_script_path = ""
     _checker_script_path = ""
+    _custom_use = False
+    _custom_std_jar = ""
     _interrupted = False # Global interrupt flag
     _round_counter = 0 # Global counter for assigning round numbers
     _log_file_path = None
@@ -493,7 +495,10 @@ class JarTester:
                     temp_output_file = tf.name
 
                 # Checker command WITHOUT --tmax
-                checker_cmd = [sys.executable, JarTester._checker_script_path, input_data_path, temp_output_file]
+                if not JarTester._custom_use:
+                    checker_cmd = [sys.executable, JarTester._checker_script_path, input_data_path, temp_output_file]
+                else:
+                    checker_cmd = [sys.executable, JarTester._checker_script_path, input_data_path, temp_output_file, JarTester._custom_std_jar]
                 debug_print(f"Checker using input(gen) '{input_data_path}' and output(jar) '{temp_output_file}'")
                 debug_print(f"Checker command: {' '.join(checker_cmd)}")
 
@@ -1285,6 +1290,7 @@ class JarTester:
             parallel_rounds_config = test_config.get('parallel', DEFAULT_PARALLEL_ROUNDS) # Use default
             debug_enabled_config = test_config.get('debug', False) # Default False
             cleanup_enabled_config = test_config.get('cleanup', False) # Default False
+            custom_use = test_config.get('custom', False)
             # Get Wall Time Limit from config, fallback to default MIN_WALL_TIME_LIMIT
             wall_time_limit_config = test_config.get('wall_time_limit', MIN_WALL_TIME_LIMIT)
 
@@ -1321,14 +1327,31 @@ class JarTester:
                 debug_print("Cleanup mode enabled via config.")
             else:
                 debug_print("Cleanup mode disabled via config.")
-
+            
+            if custom_use:
+                debug_print("Custom use instead of Checker via config")
 
             m = hw_n // 4 + 1
             hw_n_str = os.path.join(f"unit_{m}", f"hw_{hw_n}")
 
             JarTester._jar_dir = jar_base_dir
             JarTester._gen_script_path = os.path.abspath(os.path.join(hw_n_str, "gen.py"))
-            JarTester._checker_script_path = os.path.abspath(os.path.join(hw_n_str, "checker.py"))
+            if not custom_use:
+                JarTester._checker_script_path = os.path.abspath(os.path.join(hw_n_str, "checker.py"))
+            else:
+                JarTester._custom_use = True
+                custom_path = os.path.join(hw_n_str, "custom_checker.py")
+                if not os.path.exists(custom_path):
+                    print("ERROR: Can't find custom checker custom_checker.py")
+                    return 
+                else:
+                    JarTester._checker_script_path = os.path.abspath(custom_path)
+                std_path = os.path.join(hw_n_str, "std.jar")
+                if not os.path.exists(std_path):
+                    print(f"ERROR: Can't find stdout-jar custom checker use({std_path})")
+                    return
+                else:
+                    JarTester._custom_std_jar = os.path.abspath(std_path)
 
             JarTester._loaded_preset_commands = [] # Reset before loading
             gen_dir = os.path.dirname(JarTester._gen_script_path)
