@@ -753,7 +753,7 @@
         "qp": 3,
         "qm": 5
     },
-    "H11_frequent_send": { 
+    "h11_frequent_send": { 
         "ap": 2,
         "ar": 2,
         "mr": 1,
@@ -787,7 +787,7 @@
         "qbc": 1,
         "qra": 1
     },
-    "H11_many_to_one_add_focus": { 
+    "h11_many_to_one_add_focus": { 
         "ap": 5,
         "ar": 3, 
         "am": 40,
@@ -820,7 +820,7 @@
         "qbc": 0,
         "qra": 0
     },
-    "H11_setup_shared_article": { 
+    "h11_setup_shared_article": { 
         "ap": 20,
         "coa": 10,
         "foa": 30,
@@ -854,7 +854,7 @@
         "qbc": 0,
         "qra": 0
     },
-    "H11_action_forward_shared": { 
+    "h11_action_forward_shared": { 
         "afm": 50, 
         "sm": 30,  
         "qra": 20, 
@@ -888,7 +888,7 @@
         "qsp": 1,
         "qbc": 1
     },
-    "H11_message_chaos": { 
+    "h11_message_chaos": { 
         "ap": 5,
         "ar": 5,
         "mr": 2,
@@ -922,7 +922,7 @@
         "qbc": 2,
         "qra": 2
     },
-    "H11_conflicting_message_ops": { 
+    "h11_conflicting_message_ops": { 
         "ap": 3,
         "ar": 3,
         "mr": 15,
@@ -955,5 +955,188 @@
         "qsp": 1,
         "qbc": 1,
         "qra": 1
+    },
+    "h11_complete_core_setup": {
+        "ap": 0,
+        "ar": 0,
+        "mr": 0,
+        "at": 5,
+        "att": 2,
+        "coa": 5,
+        "ca": 5,
+        "foa": 5,
+        "sei": 10,
+        "am": 5,
+        "aem": 5,
+        "arem": 5,
+        "afm": 5,
+        "sm": 0,
+        "dce": 0,
+        "qv": 0,
+        "qci": 0,
+        "qts": 0,
+        "qtav": 0,
+        "qba": 0,
+        "qcs": 0,
+        "qsp": 0,
+        "qbc": 0,
+        "qra": 0,
+        "qsv": 0,
+        "qrm": 0,
+        "qp": 0,
+        "qm": 0
+    },
+    "h11_complete_core_direct_msg": {
+        "am": 20,
+        "aem": 20,
+        "arem": 20,
+        "afm": 20,
+        "sm": 40,
+        "sei": 5,
+        "qsv": 5,
+        "qrm": 5,
+        "qp": 3,
+        "qm": 5,
+        "ap": 1,
+        "ar": 0,
+        "mr": 0,
+        "at": 1,
+        "att": 1,
+        "coa": 1,
+        "ca": 1,
+        "foa": 1
+    },
+    "h11_complete_core_tag_msg": {
+        "at": 15,
+        "att": 25,
+        "am": 15,
+        "aem": 15,
+        "arem": 15,
+        "afm": 15,
+        "sm": 40,
+        "sei": 5,
+        "qsv": 5,
+        "qrm": 5,
+        "qp": 3,
+        "qm": 5,
+        "qtav": 5,
+        "qtvs": 5,
+        "ap": 1,
+        "ar": 0,
+        "mr": 0,
+        "coa": 1,
+        "ca": 1,
+        "foa": 1
+    },
+    "h11_article_forward_dense_setup": {
+        "ap": 10,
+        "coa": 15,
+        "foa": 25,
+        "ca": 20,
+        "ar": 5,
+        "at": 5,
+        "sei": 5
+    },
+    "h11_article_forward_dense_action": {
+        "afm": 40,
+        "sm": 30,
+        "qra": 10,
+        "qsv": 5,
+        "qrm": 5,
+        "am": 2,
+        "aem": 2,
+        "arem": 2,
+        "mr": 1,
+        "dt": 1,
+        "dft": 1,
+        "da": 1
+    },
+    "h11_extreme_full_graph_setup": { 
+        "ap": 0,
+        "ar": 0,
+        "mr": 0, 
+        "at": 30,
+        "att": 10, 
+        "coa": 20,
+        "ca": 20,
+        "foa": 20, 
+        "sei": 30 
+    },
+    "h11_extreme_msg_flood_type0": { 
+        "am": 25,
+        "aem": 25,
+        "arem": 25,
+        "afm": 25, 
+        "sm": 100, 
+        "qsv": 5,
+        "qrm": 5,
+        "qm": 5,
+        "qp": 2 
+    },
+    "h11_extreme_msg_flood_type1": { 
+        "at": 5,
+        "att": 10, 
+        "am": 25,
+        "aem": 25,
+        "arem": 25,
+        "afm": 25, 
+        "sm": 100, 
+        "qsv": 5,
+        "qrm": 5,
+        "qm": 5,
+        "qp": 2,
+        "qtav": 3,
+        "qtvs": 3 
+    },
+    "h11_extreme_emoji_spam_and_clear": { 
+        "sei": 20,
+        "aem": 80, 
+        "sm": 60, 
+        "dce": 20, 
+        "qp": 10 
+    },
+    "h11_extreme_red_envelope_global": { 
+        "arem": 80, 
+        "sm": 60,
+        "qm": 20, 
+        "at": 5,
+        "att": 5 
+    },
+    "h11_extreme_article_forward_chain": { 
+        "coa": 5,
+        "ca": 15,
+        "foa": 10, 
+        "afm": 80, 
+        "sm": 60,
+        "qra": 10,
+        "qsv": 5 
+    },
+    "h11_extreme_max_tag_fill_send": { 
+        "at": 10,
+        "att": 100, 
+        "am": 10,
+        "aem": 10,
+        "arem": 10,
+        "afm": 10,
+        "sm": 50,
+        "qtvs": 10,
+        "qtav": 5
+    },
+    "h11_extreme_query_bomb": { 
+        "qv": 20,
+        "qci": 20,
+        "qts": 10,
+        "qtav": 20,
+        "qba": 20,
+        "qcs": 10,
+        "qsp": 20,
+        "qtvs": 20,
+        "qbc": 20,
+        "qra": 20,
+        "qsv": 20,
+        "qrm": 20,
+        "qp": 20,
+        "qm": 20,
+        "sm": 5 
     }
 }

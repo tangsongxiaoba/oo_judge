@@ -2777,13 +2777,14 @@ if __name__ == "__main__":
         random.seed(seed_val)
         print(f"INFO: Using generated random seed: {seed_val}", file=sys.stderr) # Print seed if generated
 
+    hce_line_limit = False
     # --- HCE Constraint Application ---
     if args.hce:
         # print("INFO: HCE mode enabled. Applying constraints.", file=sys.stderr)
         hce_max_n_cmds = 3000
         hce_max_pid_val = 99
         hce_max_val_param = 200
-
+        hce_line_limit = True
         # Cap num_commands first (needed for phase parsing check)
         original_target_n = args.num_commands
         if args.phases:
@@ -2887,10 +2888,18 @@ if __name__ == "__main__":
 
         # --- Write Commands to Output ---
         # print(f"INFO: Writing {len(all_commands_list)} generated commands...", file=sys.stderr)
+        current_line = 0
+        command_num = 0
         for command_item in all_commands_list:
              # Ensure command is a string before stripping/writing
              if isinstance(command_item, str):
-                 output_stream_val.write(command_item.strip() + '\n')
+                cmd_str = command_item.strip()
+                if hce_line_limit :
+                    current_line += cmd_str.count('\n') + 1
+                    if current_line > 3000:
+                        break
+                output_stream_val.write(cmd_str + '\n')
+                command_num += 1
              else:
                  print(f"Warning: Generated non-string command item: {command_item}. Skipping.", file=sys.stderr)
         # print(f"INFO: Finished writing commands.", file=sys.stderr)
@@ -2903,7 +2912,7 @@ if __name__ == "__main__":
             print(f"{cmd_type_final}: {count_final}", file=sys.stderr)
             total_final_cmds += count_final
         print(f"Total commands generated (counted): {total_final_cmds}", file=sys.stderr)
-        print(f"Total commands in list (output): {len(all_commands_list)}", file=sys.stderr)
+        print(f"Total commands in list (output): {command_num}", file=sys.stderr)
         print("--- Final State Summary ---", file=sys.stderr)
         print(f"Persons: {len(persons)}, Relations: {len(relations)}", file=sys.stderr)
         print(f"Tags: {sum(len(t) for t in person_tags.values())} (across {len(person_tags)} owners)", file=sys.stderr)
