@@ -206,3 +206,32 @@
 
 # Test Case P11-B5 (Adapted): Message Send Failure After Churn - Public
 - gen.py --use_ln_setup --ln_nodes 500 --ln_default_value 10 -n 10000 --max_person_id 700 --density 0.1 --tag_focus 0.2 --account_focus 0.2 --message_focus 0.3 --max_message_id 3000 --phases build:1000,H11_add_msg_only:3000,churn:3000,H11_msg_target_churn_then_send:3000 --exception_ratio 0.6
+
+# Test Case 1: General Frequent Message Sending
+# Description: Builds a moderate network and then focuses on sending a large volume of varied messages.
+- gen.py --num_commands 12000 --max_person_id 400 --max_account_id 50 --max_article_id 300 --max_message_id 10000 --max_emoji_id 100 --message_focus 0.6 --tag_focus 0.1 --account_focus 0.1 --phases build:2000,H11_add_msg_only:3000,H11_frequent_send:6000,query:1000 --min_qrm 50 --min_qsv 50 --min_qm 50
+
+# Test Case 2: Many-to-One Message Barrage Simulation
+# Description: Creates a smaller network, then a phase dedicated to adding many messages (hoping some target the same people), followed by sending them.
+- gen.py --num_commands 8000 --max_person_id 150 --max_account_id 20 --max_article_id 100 --max_message_id 7000 --max_emoji_id 50 --message_focus 0.7 --phases build:1000,H11_many_to_one_add_focus:4000,H11_frequent_send:2500,query:500 --min_qrm 40 --exception_ratio 0.05
+
+# Test Case 3: Messaging in a Large, Densely Initialized Network
+# Description: Uses 'ln' to create a large initial network, then sends many messages within it.
+- gen.py --use_ln_setup --ln_nodes 600 --ln_default_value 20 --density 0.15 --num_commands 15000 --max_person_id 800 --max_account_id 80 --max_article_id 500 --max_message_id 12000 --max_emoji_id 150 --message_focus 0.5 --phases H11_add_msg_only:4000,H11_frequent_send:10000,query:1000 --min_qsv 100 --min_qrm 100 --min_qm 80 --approx
+
+# Test Case 4: Forwarding a Widely Distributed Article & Querying Duplicates
+# Description: Sets up a scenario where one article is likely distributed to many, then these followers forward it. `qra` should be stressed.
+# Using low max_account_id and max_article_id to focus the "ca" in setup.
+- gen.py --num_commands 7000 --max_person_id 200 --max_account_id 0 --max_article_id 0 --max_message_id 6000 --max_emoji_id 30 --message_focus 0.4 --account_focus 0.3 --phases H11_setup_shared_article:2000,H11_action_forward_shared:4000,query:1000 --min_qra 50
+
+# Test Case 5: Message Chaos - High Intensity Add/Send/Emoji with Network Churn
+# Description: Aims for high activity across all message types, emoji operations, while the underlying network also experiences some churn.
+- gen.py --num_commands 10000 --max_person_id 300 --max_account_id 40 --max_article_id 250 --max_message_id 9000 --max_emoji_id 80 --message_focus 0.6 --tag_focus 0.15 --account_focus 0.15 --phases H11_message_chaos:9000,query:1000 --min_qrm 60 --min_qp 30 --exception_ratio 0.07
+
+# Test Case 6: Conflicting Message Operations (Testing Robustness and Exceptions)
+# Description: Adds messages, then churns entities (persons, tags, articles) potentially related to those messages, then attempts to send. Expects send failures and tests exception handling for sm.
+- gen.py --num_commands 9000 --max_person_id 250 --max_account_id 30 --max_article_id 150 --max_message_id 8000 --max_emoji_id 60 --message_focus 0.5 --exception_ratio 0.1 --phases H11_add_msg_only:2000,H11_conflicting_message_ops:6000,query:1000 --min_qrm 30 --min_qsv 30
+
+# Test Case 7: HCE Constrained High-Intensity Message Test
+# Description: High message activity but within HCE limits. Focus on add, send, and emoji operations.
+- gen.py --hce --num_commands 3000 --message_focus 0.7 --tag_focus 0.05 --account_focus 0.05 --phases build:300,H11_add_msg_only:1000,H11_frequent_send:1500,query:200 --min_qrm 20 --min_qsv 20 --min_qp 15 --min_qm 20 --exception_ratio 0.05

@@ -18,18 +18,8 @@ REJECTED = []
 THISSTDIN = None
 
 GEN_PRESET_COMMANDS = [
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.6 --phases build:1500,query:1500 --min_qts 500",
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --phases build:1000,query:2000 --qci_focus far --min_qci 1000",
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.5 --phases build:1500,query:1500 --min_qba 500",
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.3 --tag_focus 0.7 --max_tag_size 200 --phases build:500,modify:1500,query:1000 --min_qtav 500",
-    "gen.py --hce -n 3000 --max_person_id 99 --phases build:200,modify:2800 --mr_delete_ratio 0.6",
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --phases build:500,query:2500 --min_qci 500 --min_qts 100 --min_qtav 500 --min_qba 500",
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.7 --max_degree 15",
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.01 --phases build:1500,query:1500 --min_qci 500 --min_qba 500",
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.1 --tag_focus 0.8 --phases build:500,modify:2500",
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.3 --phases build:1000,modify:2000 --mr_delete_ratio 0.05",
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.2 --tag_focus 0.4 --phases build:800,modify:1000,query:1200 --min_qci 300 --min_qtav 300 --min_qba 300",
-    "gen.py --hce -n 3000 --max_person_id 99 --density 0.15 --phases build:200,query:300,build:500,query:500,build:700,query:800",
+    "gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 2500 --max_person_id 99 --max_account_id 30 --max_article_id 300 --density 0.1 --account_focus 0.7 --tag_focus 0.1 --phases modify_accounts:2000,query:500 --exception_ratio 0.2",
+    "gen.py --use_ln_setup --ln_nodes 99 --ln_default_value 10 --hce -n 2700 --max_person_id 99 --density 0.8 --phases build:1200,query:1500 --min_qsp 300 --exception_ratio 0.15",
 ]
 
 def run_std_jar(std_jar_path, stdin_path, timeout_seconds=300):
@@ -60,7 +50,6 @@ def run_std_jar(std_jar_path, stdin_path, timeout_seconds=300):
         return None
     except FileNotFoundError:
         print(f"ERROR: 'java' command not found or Standard JAR '{std_jar_path}' not found.")
-        # This is a critical setup error, maybe raise it? For now, return None.
         return None
     except Exception as e:
         print(f"ERROR: An unexpected error occurred while running the Standard JAR for '{os.path.basename(stdin_path)}': {e}")
@@ -1165,7 +1154,6 @@ def main():
                 if submission_succeeded:
                     print(f"INFO: Submission successful for cycle {hack_attempts}.")
                     # Successful submission might trigger cooldown, the check at the start
-                    # of the *next* loop should handle the wait.
                 elif submission_was_blocked_by_cooldown:
                     print(f"INFO: Submission attempt failed due to cooldown detected by API (code 1617) for cycle {hack_attempts}.")
                     print("INFO: Waiting before next cycle due to cooldown detection...")
