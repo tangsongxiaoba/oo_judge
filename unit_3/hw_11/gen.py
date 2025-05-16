@@ -2717,20 +2717,20 @@ if __name__ == "__main__":
     # Query & Exception Controls
     parser.add_argument("--qci_focus", choices=['mixed', 'close', 'far'], default='mixed', help="Influence 'qci' pair selection (close=path, far=no path).")
     # HW9/10 Minimums
-    parser.add_argument("--min_qci", type=int, default=5, help="Minimum number of qci commands.")
-    parser.add_argument("--min_qts", type=int, default=2, help="Minimum number of qts commands.")
-    parser.add_argument("--min_qtav", type=int, default=5, help="Minimum number of qtav commands.")
-    parser.add_argument("--min_qtvs", type=int, default=5, help="Minimum number of qtvs commands.")
-    parser.add_argument("--min_qba", type=int, default=3, help="Minimum number of qba commands.")
-    parser.add_argument("--min_qcs", type=int, default=2, help="Minimum number of qcs commands.")
-    parser.add_argument("--min_qsp", type=int, default=3, help="Minimum number of qsp commands.")
-    parser.add_argument("--min_qbc", type=int, default=3, help="Minimum number of qbc commands.")
-    parser.add_argument("--min_qra", type=int, default=3, help="Minimum number of qra commands.")
+    parser.add_argument("--min_qci", type=int, default=0, help="Minimum number of qci commands.")
+    parser.add_argument("--min_qts", type=int, default=0, help="Minimum number of qts commands.")
+    parser.add_argument("--min_qtav", type=int, default=0, help="Minimum number of qtav commands.")
+    parser.add_argument("--min_qtvs", type=int, default=0, help="Minimum number of qtvs commands.")
+    parser.add_argument("--min_qba", type=int, default=0, help="Minimum number of qba commands.")
+    parser.add_argument("--min_qcs", type=int, default=0, help="Minimum number of qcs commands.")
+    parser.add_argument("--min_qsp", type=int, default=0, help="Minimum number of qsp commands.")
+    parser.add_argument("--min_qbc", type=int, default=0, help="Minimum number of qbc commands.")
+    parser.add_argument("--min_qra", type=int, default=0, help="Minimum number of qra commands.")
     # HW11 Minimums
-    parser.add_argument("--min_qsv", type=int, default=5, help="Minimum number of qsv commands.")
-    parser.add_argument("--min_qrm", type=int, default=5, help="Minimum number of qrm commands.")
-    parser.add_argument("--min_qp", type=int, default=4, help="Minimum number of qp commands.")
-    parser.add_argument("--min_qm", type=int, default=5, help="Minimum number of qm commands.")
+    parser.add_argument("--min_qsv", type=int, default=0, help="Minimum number of qsv commands.")
+    parser.add_argument("--min_qrm", type=int, default=0, help="Minimum number of qrm commands.")
+    parser.add_argument("--min_qp", type=int, default=0, help="Minimum number of qp commands.")
+    parser.add_argument("--min_qm", type=int, default=0, help="Minimum number of qm commands.")
 
     parser.add_argument("--exception_ratio", type=float, default=0.08, help="Probability (0.0-1.0) to attempt generating an exception-causing command.")
     parser.add_argument("--force_qba_empty_ratio", type=float, default=0.02, help="Probability (0.0-1.0) for normal 'qba' to target person with no acquaintances.")
@@ -2888,12 +2888,33 @@ if __name__ == "__main__":
 
         # --- Write Commands to Output ---
         # print(f"INFO: Writing {len(all_commands_list)} generated commands...", file=sys.stderr)
+        id_map = {}
         current_line = 0
         command_num = 0
-        for command_item in all_commands_list:
+        adding_id = 1
+        for command_item in all_commands_list: # Iterate over the potentially modified list
              # Ensure command is a string before stripping/writing
              if isinstance(command_item, str):
                 cmd_str = command_item.strip()
+                cmd_parts = cmd_str.split(" ")
+                is_add_message_cmd = False
+                cmd_prefix = ""
+
+                if cmd_parts:
+                    cmd_prefix = cmd_parts[0].lower() # Use lowercase for matching
+                    if cmd_prefix in ["am", "aem", "arem", "afm"]:
+                        id_map[cmd_parts[1]] = str(adding_id)
+                        cmd_parts[1] = str(adding_id)
+                        adding_id += 1
+                        # print(cmd_parts)
+                        cmd_str = " ".join(cmd_parts)
+                    elif cmd_prefix == "sm":
+                        try:
+                            cmd_parts[1] = id_map[cmd_parts[1]]
+                        except:
+                            pass
+                        cmd_str = " ".join(cmd_parts)
+                
                 if hce_line_limit :
                     current_line += cmd_str.count('\n') + 1
                     if current_line > 3000:
@@ -2902,7 +2923,6 @@ if __name__ == "__main__":
                 command_num += 1
              else:
                  print(f"Warning: Generated non-string command item: {command_item}. Skipping.", file=sys.stderr)
-        # print(f"INFO: Finished writing commands.", file=sys.stderr)
 
 
         # --- Debug Print Final Counts (Optional - uncomment to enable) ---
