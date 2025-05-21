@@ -586,3 +586,186 @@ def check_cycle(cycle_command_strings: list[str],
 
     main_library_state.__dict__.update(current_cycle_state_copy.__dict__)
     return {"is_legal": True, "error_message": "", "first_failing_command": None}
+
+if __name__ == "__main__":
+    import argparse
+    # json, sys, LibrarySystem, RuleChecker, and parser functions are already imported or available
+
+    parser = argparse.ArgumentParser(description="Checker for Library System SUT output.")
+    parser.add_argument("input_file", help="Path to the input command file (e.g., input.txt).")
+    parser.add_argument("sut_output_file", help="Path to the SUT's output file (e.g., output.txt).")
+    args = parser.parse_args()
+
+    all_input_commands: list[str] = []
+    all_sut_output_lines: list[str] = []
+
+    try:
+        with open(args.input_file, 'r', encoding='utf-8') as f:
+            all_input_commands = [line.strip() for line in f if line.strip()]
+        with open(args.sut_output_file, 'r', encoding='utf-8') as f:
+            all_sut_output_lines = [line.strip() for line in f if line.strip()]
+    except FileNotFoundError as e:
+        print(json.dumps({"status": "failure", "reason": f"Error reading files: {e}"}))
+        sys.exit(1)
+    except Exception as e:
+        print(json.dumps({"status": "failure", "reason": f"An unexpected error occurred while reading files: {e}"}))
+        sys.exit(1)
+
+    if not all_input_commands:
+        if all_sut_output_lines:
+            print(json.dumps({"status": "failure", "reason": "Input file is empty, but SUT produced output."}))
+            sys.exit(1)
+        else:
+            # Both empty, considered a trivial success or an empty test case.
+            print(json.dumps({"status": "success"}))
+            sys.exit(0)
+
+    main_library_state = LibrarySystem()
+    sut_output_idx = 0
+    input_cmd_idx = 0
+    current_command_str_for_error_reporting = "Initial book loading"
+
+    # 1. Initial Book Loading from input commands
+    try:
+        if input_cmd_idx >= len(all_input_commands):
+            # This case should be caught by `if not all_input_commands` earlier,
+            # but as a safeguard if that logic changes.
+            print(json.dumps({"status": "failure", "reason": "Input file does not contain initial book count."}))
+            sys.exit(1)
+
+        num_book_types_str = all_input_commands[input_cmd_idx]
+        input_cmd_idx += 1
+        num_book_types = int(num_book_types_str)
+        if num_book_types < 0:
+             print(json.dumps({"status": "failure", "reason": "Negative number of book types in input."}))
+             sys.exit(1)
+
+        if input_cmd_idx + num_book_types > len(all_input_commands):
+            print(json.dumps({"status": "failure", "reason": "Input file too short for declared number of book types."}))
+            sys.exit(1)
+        
+        book_init_lines = all_input_commands[input_cmd_idx : input_cmd_idx + num_book_types]
+        input_cmd_idx += num_book_types
+        main_library_state.initialize_books(book_init_lines)
+    except ValueError:
+        print(json.dumps({"status": "failure", "reason": f"Invalid format for initial book count: '{num_book_types_str}'."}))
+        sys.exit(1)
+    except Exception as e:
+        print(json.dumps({"status": "failure", "reason": f"Error during library initialization: {e}"}))
+        sys.exit(1)
+
+    checker_instance = RuleChecker(main_library_state)
+
+    # 2. Command Processing Loop
+    try:
+        while input_cmd_idx < len(all_input_commands):
+            command_str = all_input_commands[input_cmd_idx]
+            current_command_str_for_error_reporting = command_str
+            input_cmd_idx += 1
+
+            parts = command_str.split()
+            if not parts: continue 
+
+            # Assuming date is always the first part in brackets for all command types
+            if not (parts[0].startswith("[") and parts[0].endswith("]")):
+                print(json.dumps({"status": "failure", "reason": f"Command '{command_str}' missing or malformed date part."}))
+                sys.exit(1)
+            cmd_date_str = parts[0][1:-1]
+            
+            validation_result = {"is_legal": False, "error_message": "Checker: Command not processed by __main__ logic."} 
+
+            is_open_close = len(parts) == 2 and parts[1] in ["OPEN", "CLOSE"]
+
+            if is_open_close:
+                op_type = parts[1]
+                is_opening_tidy = (op_type == "OPEN")
+                if is_opening_tidy:
+                    checker_instance.current_state.apply_open_action(cmd_date_str)
+                else: # CLOSE
+                    checker_instance.current_state.apply_close_action(cmd_date_str)
+
+                if sut_output_idx >= len(all_sut_output_lines):
+                    validation_result = {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy): SUT ran out of output lines before {op_type} tidy count could be read."}
+                    break # Break from while loop, will go to final error printing
+                
+                num_moves_sut_str = all_sut_output_lines[sut_output_idx]
+                try:
+                    num_moves_sut = int(num_moves_sut_str)
+                    if num_moves_sut < 0: raise ValueError("Negative move count")
+                except ValueError:
+                    validation_result = {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy Count): SUT {op_type} tidy count ('{num_moves_sut_str}') is not a non-negative integer."}
+                    break
+
+                if sut_output_idx + 1 + num_moves_sut > len(all_sut_output_lines):
+                    validation_result = {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy Line Count): SUT declared {num_moves_sut} {op_type} tidy moves, but not enough output lines provided (needed {1+num_moves_sut} lines including count, got {len(all_sut_output_lines) - sut_output_idx} remaining)."}
+                    break
+                
+                sut_tidy_lines_for_this_op = all_sut_output_lines[sut_output_idx : sut_output_idx + 1 + num_moves_sut]
+                sut_output_idx += (1 + num_moves_sut)
+                validation_result = checker_instance.validate_sut_tidy_moves(cmd_date_str, sut_tidy_lines_for_this_op, is_opening_tidy)
+
+            else: # User operation command
+                if len(parts) < 4: # Expect: [date] stud_id action target
+                    validation_result = {"is_legal": False, "error_message": f"Format Error (User Op): Command '{command_str}' is malformed (expected at least 4 parts)."}
+                    break
+                cmd_student_id, cmd_action, cmd_target = parts[1], parts[2], parts[3]
+
+                if cmd_action == "queried":
+                    if sut_output_idx >= len(all_sut_output_lines):
+                        validation_result = {"is_legal": False, "error_message": f"Format Error (Query): SUT ran out of output lines before query header for '{command_str}'."}
+                        break
+                    sut_header_line = all_sut_output_lines[sut_output_idx]
+                    parsed_q_header = parse_sut_query_header_line(sut_header_line) # Function from checker.py
+                    if not parsed_q_header:
+                        validation_result = {"is_legal": False, "error_message": f"Format Error (Query Header): SUT malformed query header line: '{sut_header_line}' for command '{command_str}'."}
+                        break
+                    _, _, num_trace_lines_sut_declared = parsed_q_header
+                    
+                    if sut_output_idx + 1 + num_trace_lines_sut_declared > len(all_sut_output_lines):
+                        validation_result = {"is_legal": False, "error_message": f"Format Error (Query Line Count): SUT declared {num_trace_lines_sut_declared} query trace lines, but not enough output lines provided for command '{command_str}'."}
+                        break
+                    sut_lines_for_this_query = all_sut_output_lines[sut_output_idx : sut_output_idx + 1 + num_trace_lines_sut_declared]
+                    sut_output_idx += (1 + num_trace_lines_sut_declared)
+                    validation_result = checker_instance.validate_sut_query(cmd_date_str, cmd_target, sut_lines_for_this_query)
+                else: # borrow, return, order, pick
+                    if sut_output_idx >= len(all_sut_output_lines):
+                        validation_result = {"is_legal": False, "error_message": f"Format Error (User Op): SUT ran out of output lines before response for '{command_str}'."}
+                        break
+                    sut_op_line = all_sut_output_lines[sut_output_idx]; sut_output_idx += 1
+                    
+                    if cmd_action == "borrowed": validation_result = checker_instance.validate_sut_borrow(cmd_date_str, cmd_student_id, cmd_target, sut_op_line)
+                    elif cmd_action == "returned": validation_result = checker_instance.validate_sut_return(cmd_date_str, cmd_student_id, cmd_target, sut_op_line)
+                    elif cmd_action == "ordered": validation_result = checker_instance.validate_sut_order(cmd_date_str, cmd_student_id, cmd_target, sut_op_line)
+                    elif cmd_action == "picked": validation_result = checker_instance.validate_sut_pick(cmd_date_str, cmd_student_id, cmd_target, sut_op_line)
+                    else:
+                        validation_result = {"is_legal": False, "error_message": f"Checker Internal Error: Unknown command action '{cmd_action}' in command '{command_str}'."}
+            
+            if not validation_result.get("is_legal", False):
+                # Error already found by a validation method or a format check within the loop
+                reason = validation_result.get('error_message', 'Unknown validation error')
+                print(json.dumps({"status": "failure", "reason": f"Validation failed for command '{current_command_str_for_error_reporting}': {reason}"}))
+                sys.exit(1)
+        
+        # After loop, if validation_result is still the default error or broken from loop due to SUT lines issue
+        if not validation_result.get("is_legal", False) and validation_result.get("error_message"):
+             reason = validation_result.get('error_message', 'Unknown validation error after loop')
+             print(json.dumps({"status": "failure", "reason": f"Processing error related to command '{current_command_str_for_error_reporting}': {reason}"}))
+             sys.exit(1)
+
+
+        # Check for extraneous SUT output if all commands processed successfully
+        if sut_output_idx < len(all_sut_output_lines):
+            print(json.dumps({"status": "failure", "reason": f"Format Error (Extraneous Output): SUT produced extraneous output after all input commands processed. First extraneous line: '{all_sut_output_lines[sut_output_idx]}'."}))
+            sys.exit(1)
+
+        # If loop completes and no errors / no extraneous output
+        print(json.dumps({"status": "success"}))
+        sys.exit(0)
+
+    except Exception as e:
+        # Catch-all for unexpected errors during processing
+        import traceback
+        error_details = f"{type(e).__name__} - {e}\n{traceback.format_exc()}"
+        error_context = f"An unexpected critical error occurred during processing of command '{current_command_str_for_error_reporting}': {error_details}"
+        print(json.dumps({"status": "failure", "reason": error_context}))
+        sys.exit(1)
