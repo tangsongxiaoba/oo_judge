@@ -57,7 +57,9 @@ class UMLOperation(UMLElement):
              self.return_type = resolve_uml_type(raw_return_type_info['type'], id_to_name_map)
     def add_parameter(self, name, raw_param_type, id_to_name_map):
         self.parameters.append({'name': name, 'type': resolve_uml_type(raw_param_type, id_to_name_map), 'raw_type': raw_param_type})
-    def __repr__(self): return f"UMLOp({self.name}({', '.join(f'{p["name"]}:{p["type"]}' for p in self.parameters)}):{self.return_type}, {self.visibility}, static={self.is_static})"
+    def __repr__(self):
+        params = ', '.join(f"{p['name']}:{p['type']}" for p in self.parameters)
+        return f"UMLOp({self.name}({params}):{self.return_type}, {self.visibility}, static={self.is_static})"
 
 class UMLClass:
     def __init__(self, name):
@@ -82,7 +84,9 @@ class JavaMethod(JavaElement):
         self.parameters, self.return_type, self.is_static, self.is_constructor = \
             [], return_type if return_type is not None else "void", is_static, is_constructor
     def add_parameter(self, name, param_type_str): self.parameters.append({'name': name, 'type': param_type_str})
-    def __repr__(self): return f"JavaMethod({self.name}({', '.join(f'{p["name"]}:{p["type"]}' for p in self.parameters)}):{self.return_type}, {self.visibility}, static={self.is_static})"
+    def __repr__(self):
+        params = ', '.join('{}:{}'.format(p['name'], p['type']) for p in self.parameters)
+        return f"UMLOp({self.name}({params}):{self.return_type}, {self.visibility}, static={self.is_static})"
 
 class JavaClass:
     def __init__(self, name, filepath=None):
