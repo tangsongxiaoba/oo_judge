@@ -27,7 +27,7 @@ PRIMITIVE_EQUIVALENCE_MAP = {
 }
 
 def resolve_uml_type(type_value, id_to_name_map):
-    if type_value is None: return "void"
+    if type_value is None: return "void" # If a return param exists but its type is null
     if isinstance(type_value, str): return type_value
     if isinstance(type_value, dict) and "$ref" in type_value:
         ref_id = type_value["$ref"]
@@ -50,16 +50,35 @@ class UMLAttribute(UMLElement):
 class UMLOperation(UMLElement):
     def __init__(self, name, visibility, raw_return_type_info, id_to_name_map, is_static=False, class_name_context=""):
         super().__init__(name, visibility, 'operation')
-        self.parameters, self.raw_return_type_info, self.return_type, self.is_static, self.class_name_context = \
-            [], raw_return_type_info, "void", is_static, class_name_context
-        if self.name == self.class_name_context: self.return_type = "void"
-        elif raw_return_type_info and 'type' in raw_return_type_info:
-             self.return_type = resolve_uml_type(raw_return_type_info['type'], id_to_name_map)
+        self.parameters = [] # To be filled by add_parameter
+        self.raw_return_type_info = raw_return_type_info # Store the raw info for reference
+        self.is_static = is_static
+        self.class_name_context = class_name_context
+        
+        # Determine default return type before trying to resolve from raw_return_type_info
+        if self.name == self.class_name_context: # Is it a constructor?
+            self.return_type = "void" # Default for constructors (for comparison with Java's implicit void)
+        else:
+            self.return_type = "void" # Default for regular methods if no return parameter or type is specified
+
+        # Now, try to override with actual UML return type if present
+        if raw_return_type_info and 'type' in raw_return_type_info:
+             resolved_type = resolve_uml_type(raw_return_type_info['type'], id_to_name_map)
+             # Even for constructors, if UML *explicitly* states a return type (e.g., the class name), use it.
+             # The comparison logic in main() will handle constructor "ClassName" (UML) vs "void" (Java).
+             self.return_type = resolved_type
+        elif raw_return_type_info and 'type' not in raw_return_type_info and self.name != self.class_name_context:
+            # A return parameter exists, but it has no 'type' field.
+            # For a non-constructor, this usually means the type is implicitly void in UML tools,
+            # or it's an error in the UML model itself if the tool expects a type.
+            # resolve_uml_type(None, ...) would return "void", so self.return_type remains "void".
+            # The check for the *existence* of raw_return_type_info is now in parse_uml_model.
+            pass
+
+
     def add_parameter(self, name, raw_param_type, id_to_name_map):
         self.parameters.append({'name': name, 'type': resolve_uml_type(raw_param_type, id_to_name_map), 'raw_type': raw_param_type})
-    def __repr__(self):
-        params = ', '.join(f"{p['name']}:{p['type']}" for p in self.parameters)
-        return f"UMLOp({self.name}({params}):{self.return_type}, {self.visibility}, static={self.is_static})"
+    def __repr__(self): return f"UMLOp({self.name}({', '.join(f'{p["name"]}:{p["type"]}' for p in self.parameters)}):{self.return_type}, {self.visibility}, static={self.is_static})"
 
 class UMLClass:
     def __init__(self, name):
@@ -84,9 +103,7 @@ class JavaMethod(JavaElement):
         self.parameters, self.return_type, self.is_static, self.is_constructor = \
             [], return_type if return_type is not None else "void", is_static, is_constructor
     def add_parameter(self, name, param_type_str): self.parameters.append({'name': name, 'type': param_type_str})
-    def __repr__(self):
-        params = ', '.join('{}:{}'.format(p['name'], p['type']) for p in self.parameters)
-        return f"UMLOp({self.name}({params}):{self.return_type}, {self.visibility}, static={self.is_static})"
+    def __repr__(self): return f"JavaMethod({self.name}({', '.join(f'{p["name"]}:{p["type"]}' for p in self.parameters)}):{self.return_type}, {self.visibility}, static={self.is_static})"
 
 class JavaClass:
     def __init__(self, name, filepath=None):
@@ -95,7 +112,6 @@ class JavaClass:
     def __repr__(self): return f"JavaClass({self.name}, Fields:{len(self.fields)}, Methods:{sum(len(v) for v in self.methods.values())})"
 
 def parse_uml_model(mdj_path):
-    # ... (implementation remains the same as your provided version)
     uml_classes = {}
     uml_root = None
     model_element = None
@@ -134,12 +150,31 @@ def parse_uml_model(mdj_path):
             current_op_name = op_data.get("name")
             if not current_op_name: print(f"{FAIL_MSG}: R1 - 类 {class_name} 中发现一个没有名称的UMLOperation。"); continue
             visibility = UML_VISIBILITY_MAP.get(op_data.get("visibility")); is_static_op = op_data.get("isStatic", False)
-            raw_return_type_info = None; op_params_data_for_op = []
+            
+            raw_return_type_info = None # This will store the UMLParameter object for the return type
+            op_params_data_for_op = []
+            
             for param_data in op_data.get("parameters", []):
-                if param_data.get("direction") == "return": raw_return_type_info = param_data
-                else: op_params_data_for_op.append(param_data)
+                if param_data.get("direction") == "return": 
+                    raw_return_type_info = param_data
+                else: 
+                    op_params_data_for_op.append(param_data)
+            
+            # --- NEW CHECK ---
+            # Check if this operation is a constructor
+            is_constructor_op = (current_op_name == class_name)
+            if not is_constructor_op: # If it's a regular (non-constructor) method
+                if raw_return_type_info is None:
+                    # This means no parameter with direction="return" was found in the UML model for this operation.
+                    print(f"{FAIL_MSG}: UML规范检查 - 类 {class_name} 的常规方法 '{current_op_name}' 在UML中未明确定义返回类型参数 (根据指导书要求，除构造方法外，每个方法必须有一个返回参数)。")
+                # If raw_return_type_info exists, but its 'type' field is missing,
+                # UMLOperation constructor will default its return_type to "void" (or "unknown_type_format"),
+                # and R2 checks will catch mismatches with Java. The primary new check is for the *absence* of the return parameter.
+            # --- END OF NEW CHECK ---
+
             uml_op = UMLOperation(current_op_name, visibility, raw_return_type_info, id_to_name_map, is_static_op, class_name_context=class_name)
-            for param_data in op_params_data_for_op:
+            
+            for param_data in op_params_data_for_op: # These are non-return parameters
                 param_name = param_data.get("name")
                 if not param_name: print(f"{FAIL_MSG}: R1 - 类 {class_name} 方法 {current_op_name} 中发现一个没有名称的UMLParameter (非返回类型)。"); continue
                 raw_param_type = param_data.get("type")
@@ -165,7 +200,6 @@ def parse_uml_model(mdj_path):
     return uml_root, uml_classes, id_to_name_map
 
 def get_java_type_str(type_node):
-    # ... (implementation remains the same as your provided version)
     if type_node is None: return "void"
     if isinstance(type_node, str): return type_node
     base_type = "unknown_base_type"
@@ -178,7 +212,7 @@ def get_java_type_str(type_node):
             if hasattr(arg_type_obj, 'type') and arg_type_obj.type: current_arg_type_str = get_java_type_str(arg_type_obj.type)
             elif hasattr(arg_type_obj, 'pattern') and arg_type_obj.pattern and hasattr(arg_type_obj.pattern, 'sub_type'):
                 bound_kw = "?"
-                if hasattr(arg_type_obj, 'provision') and arg_type_obj.provision: bound_kw += f" {arg_type_obj.provision} {arg_type_obj.pattern.sub_type}"
+                if hasattr(arg_type_obj, 'provision') and arg_type_obj.provision: bound_kw += f" {arg_type_obj.provision} {get_java_type_str(arg_type_obj.pattern.type)}" if arg_type_obj.pattern.type else f" {arg_type_obj.provision} {arg_type_obj.pattern.sub_type}"
                 current_arg_type_str = bound_kw
             else: current_arg_type_str = "?"
             args.append(current_arg_type_str)
@@ -194,7 +228,6 @@ def get_java_type_str(type_node):
     return base_type + arguments_str + dimensions_str
 
 def normalize_uml_type(type_str):
-    # ... (implementation remains the same as your provided version)
     if not isinstance(type_str, str): return "unknown_input_to_normalize_uml" 
     if type_str.startswith("unresolved_ref("): return type_str 
     temp_type = type_str; is_array = False
@@ -203,9 +236,8 @@ def normalize_uml_type(type_str):
     return temp_type + ("[]" if is_array else "")
 
 def normalize_java_type_str(type_str):
-    # ... (implementation remains the same as your provided version)
     if not isinstance(type_str, str): return "unknown_input_to_normalize_java"
-    common_mappings = {"java.lang.String": "String", "String": "String", "java.time.LocalDate": "LocalDate", "LocalDate": "LocalDate", "java.util.List": "List", "List": "List", "java.util.ArrayList": "ArrayList", "ArrayList": "ArrayList", "java.util.Map": "Map", "Map": "Map", "java.util.Set": "Set", "Set": "Set", "boolean": "boolean", "Boolean": "Boolean", "int": "int", "Integer": "Integer", "char": "char", "Character": "Character", "double": "double", "Double": "Double", "long": "long", "Long": "Long", "float": "float", "Float": "Float", "short": "short", "Short": "Short", "byte": "byte", "Byte": "Byte", "void": "void"}
+    common_mappings = {"java.lang.String": "String", "String": "String", "java.time.LocalDate": "LocalDate", "LocalDate": "LocalDate", "java.util.List": "List", "List": "List", "java.util.LinkedList": "LinkedList", "LinkedList": "LinkedList", "java.util.HashMap" : "HashMap", "HashMap": "HashMap", "java.util.ArrayList": "ArrayList", "ArrayList": "ArrayList", "java.util.Map": "Map", "Map": "Map", "java.util.Set": "Set", "Set": "Set", "boolean": "boolean", "Boolean": "Boolean", "int": "int", "Integer": "Integer", "char": "char", "Character": "Character", "double": "double", "Double": "Double", "long": "long", "Long": "Long", "float": "float", "Float": "Float", "short": "short", "Short": "Short", "byte": "byte", "Byte": "Byte", "void": "void"}
     if type_str in common_mappings: return common_mappings[type_str]
     temp_type = type_str; is_array = False
     if temp_type.endswith("[]"): is_array = True; temp_type = temp_type[:-2]
@@ -215,7 +247,6 @@ def normalize_java_type_str(type_str):
     return type_str
 
 def get_canonical_primitive_base(type_name_variant):
-    # ... (implementation remains the same as your provided version)
     is_array = type_name_variant.endswith("[]")
     base_name = type_name_variant[:-2] if is_array else type_name_variant
     for canonical, variants in PRIMITIVE_EQUIVALENCE_MAP.items():
@@ -223,7 +254,6 @@ def get_canonical_primitive_base(type_name_variant):
     return base_name, is_array
 
 def are_types_equivalent(uml_type_str, java_type_str):
-    # ... (implementation remains the same as your provided version)
     if not isinstance(uml_type_str, str) or not isinstance(java_type_str, str): return False
     norm_uml_type = normalize_uml_type(uml_type_str)
     norm_java_type = normalize_java_type_str(java_type_str)
@@ -235,7 +265,6 @@ def are_types_equivalent(uml_type_str, java_type_str):
     return uml_base_canon == java_base_canon
 
 def parse_java_directory(src_dir):
-    # ... (implementation remains the same, ensure JavaClass stores filepath)
     java_classes = {}
     for root, _, files in os.walk(src_dir):
         for file_name_in_dir in files: 
@@ -298,7 +327,6 @@ def parse_java_directory(src_dir):
 
 
 def compare_parameters(uml_op_params, java_method_params, class_name_context):
-    # ... (implementation remains the same as your provided version)
     if len(uml_op_params) != len(java_method_params): return False, f"参数数量不匹配 (UML: {len(uml_op_params)}, Java: {len(java_method_params)})"
     for i, uml_p_info in enumerate(uml_op_params):
         java_p_info = java_method_params[i]; uml_param_name = uml_p_info['name']; java_param_name = java_p_info['name']
@@ -313,51 +341,39 @@ def compare_parameters(uml_op_params, java_method_params, class_name_context):
 # --- R5 HELPER FUNCTIONS ---
 def get_element_type_and_is_collection(type_str):
     if not isinstance(type_str, str): return (str(type_str), False)
-    
-    # Attempt to normalize before regex matching for consistency.
-    # This normalization should ideally strip outer layers if type_str is already normalized (e.g. "List<User>")
-    # but be gentle if it's a raw Java type string.
-    # Using normalize_java_type_str might be too aggressive if it simplifies to "List" from "List<User>" too early.
-    # For regex, we often want the full "List<User>" or "User[]".
-    # Let's assume type_str is the direct output from get_java_type_str or uml_attr.attr_type for now.
-
-    # Handle arrays first, as they are distinct from generics.
-    # Regex to capture base type and one or more "[]"
-    array_match = re.fullmatch(r"(.+?)(\[\]+)", type_str) # Non-greedy for base type, greedy for []
+    array_match = re.fullmatch(r"(.+?)(\[\]+)", type_str) 
     if array_match:
-        return (normalize_java_type_str(array_match.group(1)), True) # Normalize the base type of the array
-
-    # Common Java collection generics. Regex tries to capture the element type.
-    # This needs to be robust for FQNs or simple names within generics.
-    # Example: List<com.example.User>, List<User>, Set<Integer>
-    # The capture group ([\w.$<>\[\]\s,]+) is broad; further normalization of captured group is needed.
+        return (normalize_java_type_str(array_match.group(1)), True) 
     generic_match = re.fullmatch(r"(?:List|Set|Collection|Iterable)<(.+)>", type_str)
     if generic_match:
         inner_type_str = generic_match.group(1).strip()
-        return (normalize_java_type_str(inner_type_str), True) # Normalize the captured inner type
-
+        return (normalize_java_type_str(inner_type_str), True) 
     map_match = re.fullmatch(r"(?:Map|HashMap|LinkedHashMap|TreeMap)<.*,\s*(.+)>", type_str)
     if map_match:
         value_type_str = map_match.group(1).strip()
-        return (normalize_java_type_str(value_type_str), True) # Normalize the captured value type
-    
-    # If not an array or recognized generic collection, it's a single type.
+        return (normalize_java_type_str(value_type_str), True) 
     return (normalize_java_type_str(type_str), False)
 
 
 def is_multiplicity_many(multiplicity_string):
     if not multiplicity_string: return False
-    if "*" in multiplicity_string or ".." in multiplicity_string: return True
-    # If multiplicity is a simple number, it's "many" if > 1. "1" is not "many".
+    if isinstance(multiplicity_string, (int, float)): return multiplicity_string > 1
+    multiplicity_string = str(multiplicity_string).strip()
+    if "*" in multiplicity_string or "n" in multiplicity_string.lower(): return True
+    if ".." in multiplicity_string:
+        try:
+            lower, upper = map(str.strip, multiplicity_string.split(".."))
+            if not upper.isdigit() and upper != '*': return True
+            if upper == '*': return True
+            if upper.isdigit() and int(upper) == 1: return False
+            if upper.isdigit() and int(upper) > 1: return True
+            if lower.isdigit() and int(lower) > 1: return True
+        except ValueError: pass
     if multiplicity_string.isdigit(): return int(multiplicity_string) > 1
-    # Catch cases like "0,1" or "1,n" - these are often textual, not directly number > 1
-    # More complex parsing might be needed for full UML multiplicity range syntax.
-    # For now, above covers common cases.
     return False
 
 
 def main():
-    # ... (parser setup, initial parsing - same as your provided version) ...
     parser = argparse.ArgumentParser(description="对照UML类图和Java源代码进行检查。")
     parser.add_argument("src_dir", help="Java源代码目录 (例如 src)")
     parser.add_argument("uml_file", help="UML模型文件 (uml.mdj)")
@@ -370,9 +386,9 @@ def main():
     print("\n--- R2/R5: 类图与程序一致性检验 ---")
     uml_class_names = set(uml_data.keys()); java_class_names = set(java_data.keys())
     missing_in_java = uml_class_names - java_class_names
-    for mc_name in missing_in_java: print(f"{FAIL_MSG}: UML类 '{mc_name}' 在Java源代码中未找到。")
+    for mc_name in sorted(list(missing_in_java)): print(f"{FAIL_MSG}: UML类 '{mc_name}' 在Java源代码中未找到。")
     missing_in_uml = java_class_names - uml_class_names
-    for jc_name in missing_in_uml: print(f"{FAIL_MSG}: Java类 '{jc_name}' 在UML模型中未找到。")
+    for jc_name in sorted(list(missing_in_uml)): print(f"{FAIL_MSG}: Java类 '{jc_name}' 在UML模型中未找到。")
     common_classes = uml_class_names.intersection(java_class_names)
     print(f"\n共有的类 ({len(common_classes)}): {', '.join(sorted(list(common_classes))) if common_classes else '无'}")
 
@@ -380,13 +396,11 @@ def main():
         print(f"\n--- 正在检查类: {class_name} ---")
         uml_c = uml_data[class_name]; java_c = java_data[class_name]
         
-        # --- R2 Checks (60% rules, attributes, operations) ---
-        # ... (R2 checks remain largely the same as your provided version) ...
         if java_c.fields:
             attr_perc = (len(uml_c.attributes) / len(java_c.fields)) * 100 if len(java_c.fields) > 0 else (100.0 if not uml_c.attributes else 0.0)
             if len(uml_c.attributes) < 0.6 * len(java_c.fields): print(f"{FAIL_MSG}: 类 {class_name}: UML属性数量 ({len(uml_c.attributes)}) 不足Java字段数量 ({len(java_c.fields)}) 的60%。 ({attr_perc:.2f}%)")
             else: print(f"{PASS_MSG}: 类 {class_name}: UML属性数量/Java字段数量 = {attr_perc:.2f}% (>=60%)")
-        elif uml_c.attributes: print(f"{INFO_MSG}: 类 {class_name}: Java中无字段，UML有 {len(uml_c.attributes)} 属性 (60%规则通过)")
+        elif uml_c.attributes: print(f"{INFO_MSG}: 类 {class_name}: Java中无字段，UML有 {len(uml_c.attributes)} 属性 (60%规则通过，视为UML满足要求)")
         else: print(f"{PASS_MSG}: 类 {class_name}: UML和Java均无属性/字段 (60%规则通过)")
 
         java_method_count = sum(len(v) for v in java_c.methods.values())
@@ -395,7 +409,7 @@ def main():
             op_perc = (uml_op_count / java_method_count) * 100
             if uml_op_count < 0.6 * java_method_count: print(f"{FAIL_MSG}: 类 {class_name}: UML操作数量 ({uml_op_count}) 不足Java方法数量 ({java_method_count}) 的60%。 ({op_perc:.2f}%)")
             else: print(f"{PASS_MSG}: 类 {class_name}: UML操作数量/Java方法数量 = {op_perc:.2f}% (>=60%)")
-        elif uml_op_count > 0: print(f"{INFO_MSG}: 类 {class_name}: Java中无方法，UML有 {uml_op_count} 操作 (60%规则通过)")
+        elif uml_op_count > 0: print(f"{INFO_MSG}: 类 {class_name}: Java中无方法，UML有 {uml_op_count} 操作 (60%规则通过，视为UML满足要求)")
         else: print(f"{PASS_MSG}: 类 {class_name}: UML和Java均无操作/方法 (60%规则通过)")
 
         for attr_name, uml_attr in uml_c.attributes.items():
@@ -404,200 +418,188 @@ def main():
             if uml_attr.visibility != java_field.visibility: print(f"{FAIL_MSG}: 类 {class_name} 属性 '{attr_name}': 可见性不匹配 (UML: {uml_attr.visibility}, Java: {java_field.visibility})。")
             if not are_types_equivalent(uml_attr.attr_type, java_field.field_type):
                 if uml_attr.attr_type.startswith("unresolved_ref("): print(f"{INFO_MSG}: 类 {class_name} 属性 '{attr_name}': UML类型为未解析引用 '{uml_attr.attr_type}', Java类型为 '{java_field.field_type}'. 此处视为类型不匹配。")
-                print(f"{FAIL_MSG}: 类 {class_name} 属性 '{attr_name}': 类型不匹配 (UML: {uml_attr.attr_type}, Java: {java_field.field_type})。")
+                print(f"{FAIL_MSG}: 类 {class_name} 属性 '{attr_name}': 类型不匹配 (UML: {uml_attr.attr_type}, Java: {java_field.field_type})。(Normalized: UML '{normalize_uml_type(uml_attr.attr_type)}', Java '{normalize_java_type_str(java_field.field_type)}')")
             if uml_attr.is_static != java_field.is_static: print(f"{FAIL_MSG}: 类 {class_name} 属性 '{attr_name}': 静态性不匹配 (UML: {uml_attr.is_static}, Java: {java_field.is_static})。")
         
         for op_name_key, uml_op_list_val in uml_c.operations.items():
-            is_uml_op_constructor_ctx = (op_name_key == class_name)
-            java_method_candidates = [m for m in java_c.methods.get(op_name_key, []) if m.is_constructor == is_uml_op_constructor_ctx]
-            if not java_method_candidates: print(f"{FAIL_MSG}: 类 {class_name}: UML{'构造' if is_uml_op_constructor_ctx else ''}操作 '{op_name_key}' 在Java中未找到同名且同类型对应项。"); continue
+            is_uml_op_constructor_by_name = (op_name_key == class_name)
+            java_method_candidates = [m for m in java_c.methods.get(op_name_key, []) if m.is_constructor == is_uml_op_constructor_by_name]
+
             for uml_op_instance in uml_op_list_val:
-                is_curr_uml_op_constructor = (uml_op_instance.name == class_name)
-                if is_uml_op_constructor_ctx != is_curr_uml_op_constructor: continue 
-                matched_java_method = None
+                is_curr_uml_op_constructor = (uml_op_instance.name == class_name) 
+                matched_java_method = None; param_mismatch_details = []
                 for java_m_inst in java_method_candidates:
-                    params_match, _ = compare_parameters(uml_op_instance.parameters, java_m_inst.parameters, class_name)
+                    params_match, detail_msg = compare_parameters(uml_op_instance.parameters, java_m_inst.parameters, class_name)
                     if params_match: matched_java_method = java_m_inst; break
+                    else: param_mismatch_details.append(f"  - 对比Java方法签名 ({', '.join(p['type']+' '+p['name'] for p in java_m_inst.parameters)}): {detail_msg}")
+                
+                op_display_name = f"{op_name_key}({', '.join(p['type'] for p in uml_op_instance.parameters)})" # For consistent error messages
+
                 if not matched_java_method:
-                    param_details = ", ".join([f"{p['name']}:{p['type']}" for p in uml_op_instance.parameters])
-                    print(f"{FAIL_MSG}: 类 {class_name}: UML{'构造' if is_curr_uml_op_constructor else ''}操作 '{uml_op_instance.name}({param_details})' Java中无参数匹配项。"); continue
+                    param_details_uml = ", ".join([f"{p['type']} {p['name']}" for p in uml_op_instance.parameters])
+                    op_type_str_msg = '构造' if is_curr_uml_op_constructor else ''
+                    base_msg = f"{FAIL_MSG}: 类 {class_name}: UML{op_type_str_msg}操作 '{uml_op_instance.name}({param_details_uml})' 在Java中无参数匹配项。"
+                    if param_mismatch_details:
+                        base_msg += " 可能的参数不匹配原因:"
+                        print(base_msg)
+                        for d_msg in param_mismatch_details: print(d_msg)
+                    else: print(f"{FAIL_MSG}: 类 {class_name}: UML{op_type_str_msg}操作 '{uml_op_instance.name}({param_details_uml})' 在Java中未找到同名且同类型的对应方法。")
+                    continue
+                
                 jm = matched_java_method
-                if uml_op_instance.visibility != jm.visibility: print(f"{FAIL_MSG}: 类 {class_name} 方法 '{op_name_key}': 可见性不匹配 (UML:{uml_op_instance.visibility}, Java:{jm.visibility})。")
-                if not are_types_equivalent(uml_op_instance.return_type, jm.return_type):
-                    if is_curr_uml_op_constructor and jm.is_constructor:
-                        if not (uml_op_instance.return_type == "void" or normalize_uml_type(uml_op_instance.return_type) == normalize_uml_type(class_name)):
-                             print(f"{FAIL_MSG}: 类 {class_name} 构造函数 '{op_name_key}': 返回类型不匹配 (UML:{uml_op_instance.return_type}, Java隐含void)。")
-                    else: print(f"{FAIL_MSG}: 类 {class_name} 方法 '{op_name_key}': 返回类型不匹配 (UML:{uml_op_instance.return_type}, Java:{jm.return_type})。")
-                if uml_op_instance.is_static != jm.is_static: print(f"{FAIL_MSG}: 类 {class_name} 方法 '{op_name_key}': 静态性不匹配 (UML:{uml_op_instance.is_static}, Java:{jm.is_static})。")
+                if uml_op_instance.visibility != jm.visibility: print(f"{FAIL_MSG}: 类 {class_name} 方法 '{op_display_name}': 可见性不匹配 (UML:{uml_op_instance.visibility}, Java:{jm.visibility})。")
+                
+                if is_curr_uml_op_constructor and jm.is_constructor:
+                    valid_constructor_return = (are_types_equivalent(uml_op_instance.return_type, "void") or are_types_equivalent(uml_op_instance.return_type, class_name))
+                    if not valid_constructor_return:
+                        print(f"{FAIL_MSG}: 类 {class_name} 构造函数 '{op_display_name}': 返回类型不匹配 (UML:{uml_op_instance.return_type}, Java隐含void)。 (Normalized UML: {normalize_uml_type(uml_op_instance.return_type)}, Expected: void or {normalize_uml_type(class_name)})")
+                elif not are_types_equivalent(uml_op_instance.return_type, jm.return_type):
+                     print(f"{FAIL_MSG}: 类 {class_name} 方法 '{op_display_name}': 返回类型不匹配 (UML:{uml_op_instance.return_type}, Java:{jm.return_type})。(Normalized: UML '{normalize_uml_type(uml_op_instance.return_type)}', Java '{normalize_java_type_str(jm.return_type)}')")
+                
+                if uml_op_instance.is_static != jm.is_static: print(f"{FAIL_MSG}: 类 {class_name} 方法 '{op_display_name}': 静态性不匹配 (UML:{uml_op_instance.is_static}, Java:{jm.is_static})。")
+        
+        for field_name_java, java_field_instance in java_c.fields.items():
+            if field_name_java not in uml_c.attributes:
+                print(f"{INFO_MSG}: 类 {class_name}: Java字段 '{field_name_java}' 在UML中未找到对应属性 (允许)。")
         
         for method_key_java, java_method_list_val in java_c.methods.items():
             for java_m_instance in java_method_list_val:
                 is_java_constructor = java_m_instance.is_constructor
                 uml_op_name_to_find = class_name if is_java_constructor else method_key_java
-                found_in_uml = False
+                found_in_uml_fully = False
                 if uml_op_name_to_find in uml_c.operations:
-                    for uml_op_instance in uml_c.operations[uml_op_name_to_find]:
-                        if is_java_constructor != (uml_op_instance.name == class_name): continue
-                        params_match, _ = compare_parameters(uml_op_instance.parameters, java_m_instance.parameters, class_name)
-                        if params_match and uml_op_instance.visibility == java_m_instance.visibility and \
-                           are_types_equivalent(uml_op_instance.return_type, java_m_instance.return_type) and \
-                           uml_op_instance.is_static == java_m_instance.is_static:
-                            found_in_uml = True; break
-                if not found_in_uml:
+                    for uml_op_cand in uml_c.operations[uml_op_name_to_find]:
+                        if is_java_constructor != (uml_op_cand.name == class_name): continue
+                        params_match, _ = compare_parameters(uml_op_cand.parameters, java_m_instance.parameters, class_name)
+                        if not params_match: continue
+                        returns_match = False
+                        if is_java_constructor: 
+                            valid_constructor_return = (are_types_equivalent(uml_op_cand.return_type, "void") or are_types_equivalent(uml_op_cand.return_type, class_name))
+                            returns_match = valid_constructor_return
+                        else: returns_match = are_types_equivalent(uml_op_cand.return_type, java_m_instance.return_type)
+                        if not returns_match: continue
+                        if uml_op_cand.visibility == java_m_instance.visibility and uml_op_cand.is_static == java_m_instance.is_static:
+                            found_in_uml_fully = True; break 
+                if not found_in_uml_fully:
                     java_params_str = ", ".join([f"{p['type']}" for p in java_m_instance.parameters])
                     print(f"{INFO_MSG}: 类 {class_name}: Java{'构造' if is_java_constructor else ''}方法 '{method_key_java}({java_params_str})' UML中无完全对应操作 (允许)。")
 
-
-        # --- R5: 关系检查 (Revised Logic) ---
+        # --- R5: 关系检查 ---
         print(f"\n--- R5 关系检查 for class: {class_name} ---")
+        java_field_details = [] 
+        for f_name, f_val_assoc_check in java_c.fields.items():
+            elem_type, is_coll = get_element_type_and_is_collection(f_val_assoc_check.field_type)
+            if elem_type in uml_data:
+                 java_field_details.append({"name": f_name, "element_type": elem_type, "is_collection": is_coll, "raw_type": f_val_assoc_check.field_type})
+        associated_types_in_java_fields = {f['element_type'] for f in java_field_details}
 
-        # Helper: Get all types that are fields (associations) in this Java class
-        associated_types_in_java_fields = set()
-        for f_val_assoc_check in java_c.fields.values():
-            elem_assoc_check, _ = get_element_type_and_is_collection(f_val_assoc_check.field_type)
-            if elem_assoc_check in uml_data: # Only consider if the element type is a known UML class
-                 associated_types_in_java_fields.add(elem_assoc_check)
-
-        # I. ASSOCIATIONS
-        # A. UML Associations & UML Attributes (as associations) -> Java Fields
-        for assoc_info in uml_c.associations_to: # Explicit UMLAssociations
+        for assoc_info in uml_c.associations_to: 
             target_uml_name = assoc_info['target_class_name']; role_name_uml = assoc_info.get('role_name'); multiplicity_uml = assoc_info.get('multiplicity')
-            found_field = False; candidates = []
-            if role_name_uml and role_name_uml in java_c.fields: candidates.append(java_c.fields[role_name_uml])
-            elif not role_name_uml: candidates.extend(java_c.fields.values()) # Check all fields if no role name
-            
-            for java_field_cand in candidates:
-                java_elem_type, java_is_coll = get_element_type_and_is_collection(java_field_cand.field_type)
-                uml_is_many = is_multiplicity_many(multiplicity_uml)
-                # Debugging for specific case:
-                # if class_name == "BookShelf" and target_uml_name == "AppointRequest":
-                #    print(f"DEBUG_ASSOC_CHECK (UML Assoc): UML Class: {class_name}, Target: {target_uml_name}, Role: {role_name_uml}, Mult: {multiplicity_uml}")
-                #    print(f"DEBUG_ASSOC_CHECK (UML Assoc):   Java Field Candidate: {java_field_cand.name}, Type: {java_field_cand.field_type}")
-                #    print(f"DEBUG_ASSOC_CHECK (UML Assoc):     Extracted Java Elem Type: {java_elem_type}, Is Collection: {java_is_coll}")
-                #    print(f"DEBUG_ASSOC_CHECK (UML Assoc):     UML Is Many: {uml_is_many}")
-                #    print(f"DEBUG_ASSOC_CHECK (UML Assoc):     Element Types Equivalent: {are_types_equivalent(target_uml_name, java_elem_type)}")
-                #    print(f"DEBUG_ASSOC_CHECK (UML Assoc):     Collection Nature Matches: {java_is_coll == uml_is_many}")
+            uml_is_many = is_multiplicity_many(multiplicity_uml)
+            found_corresponding_java_field = False
+            for jf_detail in java_field_details:
+                types_match = are_types_equivalent(target_uml_name, jf_detail['element_type'])
+                collection_nature_matches = (uml_is_many == jf_detail['is_collection'])
+                role_name_matches = (not role_name_uml) or (role_name_uml == jf_detail['name'])
+                if types_match and collection_nature_matches and role_name_matches:
+                    found_corresponding_java_field = True; break
+            if not found_corresponding_java_field:
+                print(f"{FAIL_MSG}: R5 Assoc (UML->Java) - 类 {class_name}: UML显式关联到 '{target_uml_name}' (角色:{role_name_uml or 'N/A'}, 多重性:{multiplicity_uml}, 隐含集合:{uml_is_many}) Java中无对应字段。")
 
-                if are_types_equivalent(target_uml_name, java_elem_type) and java_is_coll == uml_is_many:
-                    found_field = True; break
-            if not found_field: print(f"{FAIL_MSG}: R5 Assoc (UML->Java) - 类 {class_name}: UML关联到 '{target_uml_name}' (角色:{role_name_uml or 'N/A'}, 多重性:{multiplicity_uml}) Java中无对应字段。")
-
-        for attr_name, uml_attr in uml_c.attributes.items(): # UMLAttributes whose type is another UML class
+        for attr_name, uml_attr in uml_c.attributes.items():
             uml_attr_elem_type, _ = get_element_type_and_is_collection(normalize_uml_type(uml_attr.attr_type))
-            if uml_attr_elem_type in uml_data: # If attribute's (element) type is another UML class
+            if uml_attr_elem_type in uml_data: 
                 uml_attr_is_many = is_multiplicity_many(uml_attr.multiplicity)
-                if attr_name not in java_c.fields:
-                    print(f"{FAIL_MSG}: R5 AttrAsAssoc (UML->Java) - 类 {class_name}: UML属性 '{attr_name}:{uml_attr.attr_type}' (暗示关联) Java中无对应字段。"); continue
-                java_field = java_c.fields[attr_name]
-                java_field_elem_type, java_field_is_coll = get_element_type_and_is_collection(java_field.field_type)
-                if not (are_types_equivalent(uml_attr_elem_type, java_field_elem_type) and uml_attr_is_many == java_field_is_coll):
-                    print(f"{FAIL_MSG}: R5 AttrAsAssoc (UML->Java) - 类 {class_name}: UML属性 '{attr_name}:{uml_attr.attr_type}'(mult:{uml_attr.multiplicity}) 与Java字段 '{java_field.name}:{java_field.field_type}' 类型或集合性质不匹配。")
+                found_java_field_for_uml_attr = False
+                for jf_detail in java_field_details:
+                    if jf_detail['name'] == attr_name:
+                        types_match = are_types_equivalent(uml_attr_elem_type, jf_detail['element_type'])
+                        collection_nature_matches = (uml_attr_is_many == jf_detail['is_collection'])
+                        if types_match and collection_nature_matches:
+                            found_java_field_for_uml_attr = True; break
+                if not found_java_field_for_uml_attr:
+                    print(f"{FAIL_MSG}: R5 AttrAsAssoc (UML->Java) - 类 {class_name}: UML属性 '{attr_name}:{uml_attr.attr_type}' (多重性:{uml_attr.multiplicity}, 隐含集合:{uml_attr_is_many}, 元素类型:{uml_attr_elem_type}) (暗示关联) Java中无对应字段或类型/集合性质不匹配。")
         
-        # B. Java Fields -> UML Associations or UML Attributes (as associations)
-        for field_name, java_field in java_c.fields.items():
-            java_field_elem_type, java_field_is_coll = get_element_type_and_is_collection(java_field.field_type)
-            if java_field_elem_type in uml_data: # If field's (element) type is a UML class
-                is_rep_as_attr = False
-                if field_name in uml_c.attributes:
-                    uml_attr_cand = uml_c.attributes[field_name]
-                    uml_attr_cand_elem, _ = get_element_type_and_is_collection(normalize_uml_type(uml_attr_cand.attr_type))
-                    uml_attr_cand_is_many = is_multiplicity_many(uml_attr_cand.multiplicity)
-                    if are_types_equivalent(java_field_elem_type, uml_attr_cand_elem) and java_field_is_coll == uml_attr_cand_is_many:
-                        is_rep_as_attr = True
-                
-                is_rep_as_assoc = False
-                # An association can exist even if it's also an attribute (e.g. attribute shows type, association shows role/navigability)
-                # So, don't use 'if not is_rep_as_attr:' here if UML might have both representations.
-                # However, for "Java field MUST be in UML", one representation is enough.
-                # If it's an attribute, we consider it represented. If not, then check explicit associations.
-                if not is_rep_as_attr:
-                    for assoc_info in uml_c.associations_to:
-                        target_uml_name = assoc_info['target_class_name']; role_name_uml = assoc_info.get('role_name'); multiplicity_uml = assoc_info.get('multiplicity')
-                        uml_assoc_is_many = is_multiplicity_many(multiplicity_uml)
-                        if are_types_equivalent(java_field_elem_type, target_uml_name): # Target type matches
-                            # Role name matches OR no role name in UML and multiplicity nature matches
-                            if (role_name_uml == field_name or not role_name_uml) and java_field_is_coll == uml_assoc_is_many:
-                                is_rep_as_assoc = True; break
-                
-                if not is_rep_as_attr and not is_rep_as_assoc:
-                    print(f"{FAIL_MSG}: R5 Assoc (Java->UML) - 类 {class_name}: Java字段 '{field_name}:{java_field.field_type}' UML中无匹配属性或关联。")
+        for jf_detail in java_field_details:
+            is_represented_in_uml = False
+            if jf_detail['name'] in uml_c.attributes:
+                uml_attr_cand = uml_c.attributes[jf_detail['name']]
+                uml_attr_cand_elem, _ = get_element_type_and_is_collection(normalize_uml_type(uml_attr_cand.attr_type))
+                uml_attr_cand_is_many = is_multiplicity_many(uml_attr_cand.multiplicity)
+                if are_types_equivalent(jf_detail['element_type'], uml_attr_cand_elem) and jf_detail['is_collection'] == uml_attr_cand_is_many:
+                    is_represented_in_uml = True
+            if not is_represented_in_uml:
+                for assoc_info in uml_c.associations_to:
+                    target_uml_name = assoc_info['target_class_name']; role_name_uml = assoc_info.get('role_name'); multiplicity_uml = assoc_info.get('multiplicity')
+                    uml_assoc_is_many = is_multiplicity_many(multiplicity_uml)
+                    types_match = are_types_equivalent(jf_detail['element_type'], target_uml_name)
+                    collection_nature_matches = (jf_detail['is_collection'] == uml_assoc_is_many)
+                    role_name_matches = (role_name_uml == jf_detail['name']) if role_name_uml else True 
+                    if types_match and collection_nature_matches and role_name_matches:
+                        is_represented_in_uml = True; break
+            if not is_represented_in_uml:
+                print(f"{FAIL_MSG}: R5 Assoc (Java->UML) - 类 {class_name}: Java字段 '{jf_detail['name']}:{jf_detail['raw_type']}' (元素类型:{jf_detail['element_type']}, 是集合:{jf_detail['is_collection']}) UML中无匹配属性或关联。")
 
-        # II. DEPENDENCIES
-        # A. UML Dependencies -> Java (non-association usage, imports, method signatures, or regex textual mention)
         for dep_target_uml in uml_c.dependencies_to:
             if dep_target_uml in associated_types_in_java_fields:
                 print(f"{WARN_MSG}: R5 Dep (UML->Java) - 类 {class_name}: UML依赖到 '{dep_target_uml}'，但在Java中体现为关联字段。依赖关系可能被关联覆盖或UML建模不精确。")
                 continue 
-            
-            # 1. Check imports and method signatures (stronger signals)
-            has_java_strong_dep_signal = any(imp == dep_target_uml or imp.endswith("." + dep_target_uml) for imp in java_c.imports)
-            if not has_java_strong_dep_signal:
-                for meth_list in java_c.methods.values():
-                    for meth in meth_list:
-                        ret_elem, _ = get_element_type_and_is_collection(meth.return_type)
-                        if are_types_equivalent(dep_target_uml, ret_elem): has_java_strong_dep_signal = True; break
-                        if any(are_types_equivalent(dep_target_uml, get_element_type_and_is_collection(p['type'])[0]) for p in meth.parameters):
-                            has_java_strong_dep_signal = True; break
-                    if has_java_strong_dep_signal: break
-            
-            # 2. If no strong signal, check regex textual mention (weaker signal)
+            has_java_import = any(imp_path == dep_target_uml or imp_path.endswith("." + dep_target_uml) for imp_path in java_c.imports)
+            has_method_sig_usage = False
+            for meth_list in java_c.methods.values():
+                for meth in meth_list:
+                    ret_elem, _ = get_element_type_and_is_collection(meth.return_type)
+                    if are_types_equivalent(dep_target_uml, ret_elem): has_method_sig_usage = True; break
+                    if any(are_types_equivalent(dep_target_uml, get_element_type_and_is_collection(p['type'])[0]) for p in meth.parameters):
+                        has_method_sig_usage = True; break
+                if has_method_sig_usage: break
             has_textual_mention = False
-            if not has_java_strong_dep_signal and java_c.filepath and os.path.exists(java_c.filepath):
+            if not has_java_import and not has_method_sig_usage and java_c.filepath and os.path.exists(java_c.filepath):
                 try:
                     with open(java_c.filepath, 'r', encoding='utf-8') as f_code_dep_uml:
                         java_code_content_dep_uml = f_code_dep_uml.read()
                     pattern_dep_uml = r'\b' + re.escape(dep_target_uml) + r'\b'
-                    if re.search(pattern_dep_uml, java_code_content_dep_uml):
-                        has_textual_mention = True
-                except IOError: pass # Ignore if file cannot be read for regex
+                    if re.search(pattern_dep_uml, java_code_content_dep_uml): has_textual_mention = True
+                except IOError: pass 
+            if not has_java_import and not has_method_sig_usage and not has_textual_mention:
+                print(f"{FAIL_MSG}: R5 Dep (UML->Java) - 类 {class_name}: UML依赖到 '{dep_target_uml}' Java中无明显体现 (非关联, 且无imports/方法签名使用/文本提及)。")
+            elif not has_java_import and not has_method_sig_usage and has_textual_mention:
+                 print(f"{INFO_MSG}: R5 Dep (UML->Java) - 类 {class_name}: UML依赖到 '{dep_target_uml}' Java中仅有文本提及 (非关联, 无imports/方法签名使用)。")
 
-            if not has_java_strong_dep_signal and not has_textual_mention:
-                print(f"{FAIL_MSG}: R5 Dep (UML->Java) - 类 {class_name}: UML依赖到 '{dep_target_uml}' Java中无明显体现 (非关联, 且无imports/签名/文本提及)。")
-            elif not has_java_strong_dep_signal and has_textual_mention:
-                 print(f"{INFO_MSG}: R5 Dep (UML->Java) - 类 {class_name}: UML依赖到 '{dep_target_uml}' Java中仅有文本提及 (非关联, 无imports/签名)。")
-
-
-        # B. Java (non-association usage in signatures & textual mentions) -> UML Dependencies
-        java_sig_deps_targets = set()
+        java_dep_targets_found = set()
+        for imp_path in java_c.imports:
+            simple_imp_name = imp_path.split('.')[-1]
+            if simple_imp_name in uml_data and simple_imp_name != class_name and simple_imp_name not in associated_types_in_java_fields:
+                java_dep_targets_found.add(simple_imp_name)
         for meth_list in java_c.methods.values():
             for meth in meth_list:
                 ret_elem, _ = get_element_type_and_is_collection(meth.return_type)
                 if ret_elem in uml_data and ret_elem != class_name and ret_elem not in associated_types_in_java_fields:
-                    java_sig_deps_targets.add(ret_elem)
+                    java_dep_targets_found.add(ret_elem)
                 for p_info in meth.parameters:
                     param_elem, _ = get_element_type_and_is_collection(p_info['type'])
                     if param_elem in uml_data and param_elem != class_name and param_elem not in associated_types_in_java_fields:
-                        java_sig_deps_targets.add(param_elem)
-        
-        textual_mentions_for_java_dep = set()
+                        java_dep_targets_found.add(param_elem)
         if java_c.filepath and os.path.exists(java_c.filepath):
             try:
                 with open(java_c.filepath, 'r', encoding='utf-8') as f_code_java_dep:
                     java_code_content_java_dep = f_code_java_dep.read()
-                for uml_class_name_iter_dep in uml_data.keys(): # Iterate over all known UML class names
-                    if uml_class_name_iter_dep == class_name: continue 
-                    if uml_class_name_iter_dep in associated_types_in_java_fields: continue # Already an association
-                    if uml_class_name_iter_dep in java_sig_deps_targets: continue # Already a signature dep
-
-                    pattern_java_dep = r'\b' + re.escape(uml_class_name_iter_dep) + r'\b'
+                for potential_dep_target in uml_data.keys(): 
+                    if potential_dep_target == class_name: continue 
+                    if potential_dep_target in associated_types_in_java_fields: continue 
+                    if potential_dep_target in java_dep_targets_found: continue 
+                    pattern_java_dep = r'\b' + re.escape(potential_dep_target) + r'\b'
                     if re.search(pattern_java_dep, java_code_content_java_dep):
-                        textual_mentions_for_java_dep.add(uml_class_name_iter_dep)
+                        java_dep_targets_found.add(potential_dep_target)
             except IOError: pass
         
-        all_potential_java_deps = java_sig_deps_targets.union(textual_mentions_for_java_dep)
-
-        for dep_target_java in all_potential_java_deps:
+        for dep_target_java in java_dep_targets_found:
             if dep_target_java not in uml_c.dependencies_to:
-                # Is this "dependency" actually an attribute in UML? (less likely for pure textual/signature)
-                is_attr_in_uml_for_java_dep = any(
-                    are_types_equivalent(dep_target_java, get_element_type_and_is_collection(normalize_uml_type(ua.attr_type))[0])
-                    for ua_name, ua in uml_c.attributes.items()
-                )
-                source_of_dep = "方法签名" if dep_target_java in java_sig_deps_targets else "文本提及(正则)"
-                
-                if not is_attr_in_uml_for_java_dep: 
-                    print(f"{FAIL_MSG}: R5 Dep (Java->UML) - 类 {class_name}: Java通过 ({source_of_dep}) 依赖于 '{dep_target_java}' (非关联)，但在UML中未找到对应Dependency (且非UML属性)。")
-                # else: Java dependency target is found as a UML attribute, could be INFO or PASS depending on strictness.
+                is_attr_in_uml = any(are_types_equivalent(dep_target_java, get_element_type_and_is_collection(normalize_uml_type(ua.attr_type))[0]) for ua in uml_c.attributes.values())
+                if not is_attr_in_uml:
+                    source_of_java_dep = "import语句" if any(dep_target_java == imp.split('.')[-1] for imp in java_c.imports) else "方法签名" if any(are_types_equivalent(dep_target_java, get_element_type_and_is_collection(m.return_type)[0]) or any(are_types_equivalent(dep_target_java, get_element_type_and_is_collection(p['type'])[0]) for p in m.parameters) for ml in java_c.methods.values() for m in ml) else "代码内文本提及(正则)"
+                    print(f"{FAIL_MSG}: R5 Dep (Java->UML) - 类 {class_name}: Java通过 ({source_of_java_dep}) 依赖于 '{dep_target_java}' (非关联类型)，但在UML中未找到对应Dependency关系 (且非同名UML属性)。")
+
     print("\n检查完成。")
 
 if __name__ == "__main__":
