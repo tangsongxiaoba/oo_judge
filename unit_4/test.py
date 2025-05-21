@@ -429,12 +429,87 @@ class JarTester:
             if JarTester._interrupted: return None
             # (Error log file generation for failed JARs - unchanged)
             failed_jars_in_round = [r for r in results_this_round if r.get("status") not in ["CORRECT", "INTERRUPTED"]]
+
             if failed_jars_in_round:
                 error_log_filename = f"errors_round_{round_num}_seed_{current_seed}.log"
-                # ... (write to error log file as before) ...
+                error_log_filepath = os.path.abspath(os.path.join(LOG_DIR, error_log_filename))
+                debug_print(f"Round {round_num}: Failures detected. Logging errors to separate file: {error_log_filepath}")
+                try:
+                    os.makedirs(LOG_DIR, exist_ok=True) # 确保日志目录存在
+                    with open(error_log_filepath, "w", encoding="utf-8", errors='replace') as f_err:
+                        f_err.write(f"--- Error Log for Test Round {round_num} ---\n")
+                        f_err.write(f"Seed Used: {current_seed}\n")
+                        f_err.write(f"Driver Args (Preset + Seed): {full_driver_args_str_with_seed}\n")
+                        f_err.write(f"Wall Time Limit Applied: {round_wall_time_limit:.1f}s\n")
+                        f_err.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        f_err.write("-" * 40 + "\n\n")
+
+                        for r_fail in failed_jars_in_round:
+                            jar_name = r_fail.get("jar_file", "UnknownJAR")
+                            status = r_fail.get("status", "UNKNOWN")
+                            f_err.write(f"--- Failing JAR: {jar_name} ---\n")
+                            f_err.write(f"Status: {status}\n")
+                            f_err.write(f"Error Details: {r_fail.get('error_details', '')}\n")
+                            f_err.write(f"Driver SUT Input Log Path: {r_fail.get('driver_input_log_path', '<Not Available>')}\n")
+                            f_err.write(f"Driver SUT Output Log Path: {r_fail.get('driver_sut_output_log_path', '<Not Available>')}\n")
+
+                            f_err.write("--- Driver Stdout (JSON if any) ---\n")
+                            driver_stdout_content = "".join(r_fail.get('driver_stdout', ['<No stdout captured from driver>']))
+                            f_err.write(driver_stdout_content.strip() + "\n")
+                            f_err.write("--- End Driver Stdout ---\n\n")
+
+                            f_err.write("--- Driver Stderr ---\n")
+                            driver_stderr_content = "".join(r_fail.get('driver_stderr', ['<No stderr captured from driver>']))
+                            MAX_ERR_LOG_LINES = 200 # 限制stderr的行数，避免日志过大
+                            stderr_lines = driver_stderr_content.strip().splitlines()
+                            for i, err_line in enumerate(stderr_lines):
+                                if i < MAX_ERR_LOG_LINES:
+                                    f_err.write(f"  {err_line.strip()}\n")
+                                elif i == MAX_ERR_LOG_LINES:
+                                    f_err.write(f"  ... (driver stderr truncated after {MAX_ERR_LOG_LINES} lines)\n")
+                                    break
+                            if not stderr_lines:
+                                f_err.write("  <No stderr content>\n")
+                            elif len(stderr_lines) <= MAX_ERR_LOG_LINES:
+                                f_err.write("  <End of Driver Stderr>\n")
+                            f_err.write("--- End Driver Stderr ---\n\n")
+                            f_err.write("-" * 20 + "\n\n")
+                    
+                    print(f"INFO [{thread_name}] Round {round_num}: Errors occurred. Details saved to {error_log_filepath}")
+
+                except Exception as e_err_log:
+                    print(f"ERROR [{thread_name}] Round {round_num}: Failed to write separate error log file {error_log_filepath}: {e_err_log}", file=sys.stderr)
             # (Cleanup logic - unchanged)
             if CLEANUP_SUCCESSFUL_ROUNDS and results_this_round: # (cleanup logic as before)
-                pass
+                all_passed_this_round = all(r.get("status") == "CORRECT" for r in results_this_round)
+                files_to_remove_in_cleanup = []
+                if all_passed_this_round:
+                    debug_print(f"Round {round_num}: All JARs passed. Cleaning up all driver SUT log files for this round...")
+                    for r_clean in results_this_round:
+                        sut_input_log = r_clean.get("driver_input_log_path")
+                        sut_output_log = r_clean.get("driver_sut_output_log_path")
+                        if sut_input_log and os.path.exists(sut_input_log): files_to_remove_in_cleanup.append(sut_input_log)
+                        if sut_output_log and os.path.exists(sut_output_log): files_to_remove_in_cleanup.append(sut_output_log)
+                else: # Some JARs failed
+                    debug_print(f"Round {round_num}: Some JARs failed. Cleaning up driver SUT log files only for CORRECT runs...")
+                    for r_clean in results_this_round:
+                        if r_clean.get("status") == "CORRECT":
+                            sut_input_log = r_clean.get("driver_input_log_path")
+                            sut_output_log = r_clean.get("driver_sut_output_log_path")
+                            if sut_input_log and os.path.exists(sut_input_log): files_to_remove_in_cleanup.append(sut_input_log)
+                            if sut_output_log and os.path.exists(sut_output_log): files_to_remove_in_cleanup.append(sut_output_log)
+                        else: # Failed JAR, keep its logs
+                            sut_input_log = r_clean.get("driver_input_log_path")
+                            sut_output_log = r_clean.get("driver_sut_output_log_path")
+                            if sut_input_log: debug_print(f"  Keeping failed SUT input log: {sut_input_log}")
+                            if sut_output_log: debug_print(f"  Keeping failed SUT output log: {sut_output_log}")
+                
+                for file_path_to_remove in files_to_remove_in_cleanup:
+                    try:
+                        os.remove(file_path_to_remove)
+                        debug_print(f"  Deleted (cleanup): {file_path_to_remove}")
+                    except OSError as e_del:
+                        print(f"WARNING [{thread_name}] Round {round_num}: Failed to delete temp file {file_path_to_remove}: {e_del}", file=sys.stderr)
             round_results_package = {
                 "round_num": round_num, "results": results_this_round, "preset_cmd": full_driver_args_str_with_seed,
                 "wall_limit": round_wall_time_limit, "seed_used": current_seed }
