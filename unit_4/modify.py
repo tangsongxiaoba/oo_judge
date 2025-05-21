@@ -89,7 +89,7 @@ def findRef(data):
         if data.get('type') is not None:
             t = data.get('type')
             if isinstance(t, dict) and t.get('$ref') is not None:
-                name = uml_classes[t.get('$ref')]
+                name = uml_classes.get(t.get('$ref'))
                 if name not in all_classes:
                     data['type'] = name
         for value in data.values():
@@ -150,7 +150,9 @@ def modifyAssociation(data):
                     name = item.get('end2').pop('name')
                     subtype = item.get('end2').get('reference')
                     visibility = item.get('end2').pop('visibility')
-                    is_read_only = item.get('end2').pop('isReadOnly')
+                    is_read_only = False
+                    if item.get('end2').get('isReadOnly') is not None:
+                        is_read_only = item.get('end2').pop('isReadOnly')
                     item.get('end2').pop('navigable')
                     item.get('end1').pop('visibility')
                     if item.get('end2').get('multiplicity') == '*':
