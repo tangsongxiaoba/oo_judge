@@ -1,6 +1,6 @@
-hw: 11
+hw: 13
 assets_dir: assets
-class_path: hw11_official.jar
+class_path: library1.jar
 stu_id: 23066666 # 学号
 stu_pwd: 'password' # 密码
 jar_base_dir: jar
@@ -19,8 +19,10 @@ update:
   log_suffix: .log
   target_line_prefix: 'Input Data File Path:'
 test:
-  hce: False
-  custom: False      # 使用同目录下std.jar进行对拍
+  min_wall_time_limit: 15.0                 # (seconds) Minimum floor for any wall time limit
+  base_wall_time_per_cycle: 2.5             # (seconds) Estimated time per cycle in driver.py
+  base_fixed_overhead_time: 5.0             # (seconds) Estimated fixed overhead for driver
+  default_estimated_wall_time: 50.0         # (seconds) Fallback if --max_cycles not in preset
   parallel: 16
   debug: False
   cleanup: True

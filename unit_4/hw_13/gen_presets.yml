@@ -1,0 +1,103 @@
+# gen_presets.yml for Library System (driver.py)
+
+# Scenario 1: Small Library, Low Activity, Few Cycles
+# Goal: Basic functionality check, quick run.
+- "--init_types 3 --init_min_cp 1 --init_max_cp 2 --max_cycles 5 --max_total_commands 20 --min_req 1 --max_req 2 --b_weight 1 --o_weight 1 --q_weight 1 --new_s_ratio 0.1"
+
+# Scenario 2: Medium Library, Moderate Activity, Focus on Borrows
+# Goal: Test borrow/return mechanics thoroughly.
+- "--init_types 10 --init_min_cp 2 --init_max_cp 5 --max_cycles 15 --max_total_commands 100 --min_req 2 --max_req 5 --b_weight 5 --o_weight 2 --q_weight 2 --failed_o_weight 1 --new_s_ratio 0.2"
+
+# Scenario 3: Many Initial C-Type Books, High Order/Pick Activity
+# Goal: Stress test the reservation system (ordering and picking C-books).
+- "--init_types 15 --init_min_cp 1 --init_max_cp 3 --max_cycles 20 --max_total_commands 150 --min_req 3 --max_req 6 --b_weight 1 --o_weight 5 --q_weight 1 --failed_o_weight 2 --new_s_ratio 0.15"
+
+# Scenario 4: Long Run, High Query Load, Many Students
+# Goal: Test query performance and handling of many student records over time.
+- "--init_types 8 --init_min_cp 3 --init_max_cp 8 --max_cycles 30 --max_total_commands 250 --min_req 5 --max_req 10 --b_weight 2 --o_weight 2 --q_weight 6 --new_s_ratio 0.3"
+
+# Scenario 5: Stress Test Failed Orders and Edge Cases
+# Goal: Generate many situations where orders should fail, testing SUT's rejection logic.
+# Improvement: Slightly lower new_s_ratio to have more existing students hit various limits leading to failed orders.
+- "--init_types 5 --init_min_cp 1 --init_max_cp 2 --max_cycles 10 --max_total_commands 80 --min_req 2 --max_req 4 --b_weight 1 --o_weight 1 --q_weight 1 --failed_o_weight 5 --new_s_ratio 0.1" # Reduced new_s_ratio
+
+# Scenario 6: No New Students after Initial, Focus on Existing User Limits
+# Goal: Test how the system handles established users hitting their borrowing/ordering limits.
+- "--init_types 7 --init_min_cp 2 --init_max_cp 4 --max_cycles 15 --max_total_commands 120 --min_req 3 --max_req 5 --b_weight 3 --o_weight 3 --q_weight 2 --new_s_ratio 0.0"
+
+# Scenario 7: Minimal Initial Books, Many Order Requests
+# Goal: Force contention for few resources, testing order queue and reservation fulfillment.
+- "--init_types 2 --init_min_cp 1 --init_max_cp 1 --max_cycles 20 --max_total_commands 100 --min_req 2 --max_req 5 --b_weight 1 --o_weight 4 --q_weight 1 --failed_o_weight 1 --new_s_ratio 0.1" # Added new_s_ratio for completeness
+
+# Scenario 8: Short Days (Few Requests), Many Days Skipped
+# Goal: Test handling of time progression and reservation expiry over longer periods with sparse activity.
+- "--init_types 5 --init_min_cp 2 --init_max_cp 3 --max_cycles 10 --max_total_commands 50 --min_req 1 --max_req 1 --min_skip 3 --max_skip 7 --b_weight 2 --o_weight 2 --q_weight 2 --new_s_ratio 0.1" # Added new_s_ratio
+
+# Scenario 9: Max Initial Books, Max Requests Per Day, Stress Overall Throughput
+# Goal: General stress test with high load.
+- "--init_types 20 --init_min_cp 5 --init_max_cp 10 --max_cycles 25 --max_total_commands 300 --min_req 8 --max_req 15 --b_weight 3 --o_weight 3 --q_weight 3 --failed_o_weight 1 --new_s_ratio 0.25"
+
+# Scenario 10: Specific Start Date (e.g., end of year), Test Date Logic
+# Goal: Check if specific date ranges or year boundaries are handled correctly.
+- "--init_types 6 --init_min_cp 2 --init_max_cp 4 --max_cycles 10 --max_total_commands 70 --start_year 2025 --start_month 12 --start_day 20 --min_req 2 --max_req 4 --b_weight 2 --o_weight 2 --q_weight 2 --new_s_ratio 0.1" # Added weights and ratio
+
+# Scenario 11: Very few B-type books, many students trying to borrow/order B-type
+# Goal: Stress B-book limits.
+- "--init_types 4 --init_min_cp 1 --init_max_cp 1 --max_cycles 15 --max_total_commands 100 --min_req 3 --max_req 5 --b_weight 10 --o_weight 1 --q_weight 1 --new_s_ratio 0.4"
+
+# Scenario 12: Rapid Cycling with Minimal Skips
+# Goal: Test frequent OPEN/CLOSE processing and associated tidying logic, especially for BRO.
+- "--init_types 8 --init_min_cp 2 --init_max_cp 4 --max_cycles 20 --max_total_commands 150 --min_skip 0 --max_skip 0 --min_req 2 --max_req 4 --b_weight 4 --o_weight 2 --q_weight 1 --new_s_ratio 0.1" # Added weights and ratio
+
+# Scenario 13: Focus on Querying Non-Existent or Rarely Moved Books
+# Goal: Test query robustness for various book states.
+- "--init_types 10 --init_min_cp 1 --init_max_cp 2 --max_cycles 10 --max_total_commands 80 --q_weight 10 --b_weight 1 --o_weight 1 --failed_o_weight 0 --new_s_ratio 0.1" # Added failed_o_weight and new_s_ratio
+
+# Scenario 14: Maximize commands quickly, fewer cycles (to hit max_total_commands early)
+# Goal: Test behavior when max_total_commands is the limiting factor.
+- "--init_types 5 --init_min_cp 3 --init_max_cp 5 --max_cycles 30 --max_total_commands 50 --min_req 5 --max_req 10 --b_weight 2 --o_weight 2 --q_weight 1 --failed_o_weight 1 --new_s_ratio 0.1" # Added weights and ratio
+
+# Scenario 15: Long period of inactivity simulated by later start date
+# Goal: Test system state after a simulated quiet period.
+- "--init_types 5 --init_min_cp 2 --init_max_cp 3 --max_cycles 15 --max_total_commands 100 --min_skip 0 --max_skip 1 --start_year 2025 --start_month 3 --start_day 1 --b_weight 2 --o_weight 2 --q_weight 1 --failed_o_weight 1 --new_s_ratio 0.1" # Added weights and ratio
+
+# --- NEW SCENARIOS ---
+
+# Scenario 16: A-Type Book Interaction Attempts
+# Goal: Ensure A-type books (if generated) are correctly handled (rejected for borrow/order).
+# Relies on gen.py randomly producing 'A' prefixed ISBNs among the init_types.
+- "--init_types 10 --init_min_cp 1 --init_max_cp 2 --max_cycles 10 --max_total_commands 80 --min_req 3 --max_req 5 --b_weight 4 --o_weight 4 --q_weight 1 --failed_o_weight 2 --new_s_ratio 0.2"
+
+# Scenario 17: Extreme B-Book Scarcity and Demand
+# Goal: Forcefully test the 'one B-book' rule (held or ordered) with very high competition.
+# Hopes init_types 2 produces at least one B-type.
+- "--init_types 2 --init_min_cp 1 --init_max_cp 1 --max_cycles 15 --max_total_commands 100 --min_req 4 --max_req 6 --b_weight 8 --o_weight 8 --q_weight 1 --failed_o_weight 4 --new_s_ratio 0.1"
+
+# Scenario 18: Extreme C-Book (Same ISBN) Scarcity and Demand
+# Goal: Forcefully test 'one C-book per ISBN' rule (held or ordered) with high competition for few C-book ISBNs.
+# Hopes init_types 2 produces at least one C-type. Few copies ensure students quickly hold one, then others try for same ISBN.
+- "--init_types 2 --init_min_cp 2 --init_max_cp 2 --max_cycles 15 --max_total_commands 100 --min_req 4 --max_req 6 --b_weight 1 --o_weight 8 --q_weight 1 --failed_o_weight 4 --new_s_ratio 0.1"
+
+# Scenario 19: Total Book Exhaustion Test
+# Goal: Try to get all books borrowed or reserved in AO, then observe behavior for new requests.
+- "--init_types 1 --init_min_cp 1 --init_max_cp 1 --max_cycles 10 --max_total_commands 50 --min_req 2 --max_req 3 --b_weight 5 --o_weight 5 --q_weight 1 --failed_o_weight 1 --new_s_ratio 0.5" # High new student ratio to quickly try and grab the single book
+
+# Scenario 20: AO Pickup Deadline Stress - Just Before & Just After
+# Goal: Generate scenarios where students attempt to pick up books very close to, or just after, their AO reservation deadline.
+# This relies on gen.py's date progression and the checker accurately tracking deadlines. min_skip/max_skip will be crucial.
+# We want some orders, then a skip of 4-5 days, then pick attempts.
+- "--init_types 5 --init_min_cp 1 --init_max_cp 2 --max_cycles 20 --max_total_commands 100 --min_req 1 --max_req 2 --o_weight 5 --b_weight 1 --q_weight 1 --failed_o_weight 1 --new_s_ratio 0.2 --min_skip 4 --max_skip 5"
+
+# Scenario 21: BRO Saturation before OPEN tidy
+# Goal: Fill BRO with returned books, then trigger OPEN to test SUT's mandatory BRO clearing.
+# Approach: High borrow activity in one cycle (lots of books out), then in the *next* cycle (minimal skip), high return activity.
+# This is tricky to do in one preset line. Best effort: high borrow, then rely on natural returns.
+# Scenario 9 already does high churn which will stress BRO tidying.
+# This new scenario will try to make returns more likely just before an OPEN.
+# High borrow/order in early cycles, then shift weight to returns (conceptually, gen.py doesn't directly support shifting weights mid-run).
+# So, we'll use high overall activity and min_skip 0.
+- "--init_types 10 --init_min_cp 3 --init_max_cp 5 --max_cycles 15 --max_total_commands 150 --min_req 5 --max_req 8 --b_weight 6 --o_weight 2 --q_weight 1 --failed_o_weight 1 --new_s_ratio 0.1 --min_skip 0 --max_skip 0"
+
+# Scenario 22: All Students, All Books Initialized, Then No New Students/Books
+# Goal: A large, stable system where limits and long-term interactions are tested without influx of new elements. Max out initial setup.
+- "--init_types 20 --init_min_cp 10 --init_max_cp 10 --max_cycles 30 --max_total_commands 300 --min_req 3 --max_req 6 --b_weight 3 --o_weight 3 --q_weight 2 --failed_o_weight 1 --new_s_ratio 0.0"
