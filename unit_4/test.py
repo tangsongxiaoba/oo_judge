@@ -317,7 +317,7 @@ class JarTester:
         summary_data.sort(key=lambda x: (-x["correct_rate"], x["jar"]))
         header = f"{'JAR':<25} | {'Correct %':<10} | {'Passed/Total':<15}"
         summary_lines.append(header); summary_lines.append("-" * len(header))
-        for item in summary_data: summary_lines.append(f"{item['jar']:<25} | {item['correct_rate']:<10.1f}% | {f'{item["correct"]}/{item["total"]}' :<15}")
+        for item in summary_data: summary_lines.append(f"{item['jar']:<25} | {item['correct_rate']:<10.1f}% | {item['correct']}/{item['total']:<15}")
         summary_lines.append("-" * len(header)); return "\n".join(summary_lines)
 
     @staticmethod
