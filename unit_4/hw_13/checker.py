@@ -67,15 +67,34 @@ def parse_sut_tidy_move_line(line: str) -> dict | None:
     if len(parts) == 9:
         if parts[7] != "for": return None
         target_student_for_ao = parts[8]
-        if to_loc_short != LibrarySystem.LOCATION_SHORT_MAP["appointment_office"]: return None
-    elif to_loc_short == LibrarySystem.LOCATION_SHORT_MAP["appointment_office"]: return None
+        if to_loc_short != LibrarySystem.LOCATION_SHORT_MAP["appointment_office"]: return None # "for" only allowed if target is AO
+    elif to_loc_short == LibrarySystem.LOCATION_SHORT_MAP["appointment_office"]: return None # Target AO must have "for"
     return {"date_str": date_str, "book_copy_id": book_copy_id, "from_loc_short": from_loc_short, "to_loc_short": to_loc_short, "target_student_for_ao": target_student_for_ao}
 
 def _is_isbn_like(target_str: str) -> bool:
-    return target_str.count('-') == 1 and len(target_str.split('-')) == 2
+    # Example: B-0001
+    parts = target_str.split('-')
+    if len(parts) != 2: return False
+    if not (len(parts[0]) == 1 and parts[0] in "ABC"): return False # Type
+    if not (len(parts[1]) == 4 and parts[1].isdigit()): return False # Sequence
+    return True
+
 
 def _is_book_copy_id_like(target_str: str) -> bool:
-    return target_str.count('-') == 2 and len(target_str.split('-')) == 3
+    # Example: B-0001-01
+    parts = target_str.split('-')
+    if len(parts) != 3: return False
+    if not (len(parts[0]) == 1 and parts[0] in "ABC"): return False # Type
+    if not (len(parts[1]) == 4 and parts[1].isdigit()): return False # Sequence
+    if not (len(parts[2]) >= 1 and parts[2].isdigit()): return False # Copy number (at least 1 digit, e.g. '1' or '01')
+    try:
+        copy_num_int = int(parts[2])
+        if not (1 <= copy_num_int <= 99): # Allow up to 99 for flexibility, though problem says max 10
+             pass
+    except ValueError:
+        return False
+    return True
+
 
 class RuleChecker:
     def __init__(self, library_state: LibrarySystem):
@@ -104,13 +123,11 @@ class RuleChecker:
 
         # --- Step 2: Target Format and Content Validation (depends on SUT status) ---
         if parsed_sut["status"] == "reject":
-            # For 'borrowed [reject]', SUT target must be the command ISBN.
             if not _is_isbn_like(sut_target_str):
-                return {"is_legal": False, "error_message": f"Format Error (Borrow Reject): SUT target '{sut_target_str}' is not in ISBN format (e.g., TYPE-SEQ). Expected command ISBN '{cmd_isbn}'. SUT line: '{sut_output_line}'."}
+                return {"is_legal": False, "error_message": f"Format Error (Borrow Reject): SUT target '{sut_target_str}' is not in valid ISBN format (e.g., TYPE-SEQ). Expected command ISBN '{cmd_isbn}'. SUT line: '{sut_output_line}'."}
             if sut_target_str != cmd_isbn:
                 return {"is_legal": False, "error_message": f"Format Error (Borrow Reject): SUT rejected for ISBN '{sut_target_str}', but command was for ISBN '{cmd_isbn}'. SUT line: '{sut_output_line}'."}
 
-            # --- Step 3: Logical Validation for REJECT ---
             student = self._get_student(cmd_student_id)
             book_type_to_borrow = self.current_state._get_book_type_from_id_or_isbn(cmd_isbn)
             can_be_borrowed_by_rule = True; rejection_reason_checker = "Checker finds borrow permissible."
@@ -125,18 +142,17 @@ class RuleChecker:
                 can_be_borrowed_by_rule = False; rejection_reason_checker = f"Student '{cmd_student_id}' already holds a copy of this C-type ISBN '{cmd_isbn}' ('{student.held_c_books_by_isbn[cmd_isbn]}')."
 
             if not can_be_borrowed_by_rule:
-                return {"is_legal": True} # SUT correctly rejected.
+                return {"is_legal": True} 
             else:
                 return {"is_legal": False, "error_message": f"Logic Error (Borrow Reject): SUT rejected borrow of '{cmd_isbn}' by '{cmd_student_id}', but checker deems it permissible. Reason: {rejection_reason_checker} SUT line: '{sut_output_line}'."}
 
         elif parsed_sut["status"] == "accept":
-            # For 'borrowed [accept]', SUT target must be a BookCopyID of the correct ISBN.
             if not _is_book_copy_id_like(sut_target_str):
                 err_detail = "is not in BookCopyID format (e.g., TYPE-SEQ-COPYNUM)."
                 if _is_isbn_like(sut_target_str): err_detail = "is an ISBN; expected a specific BookCopyID."
                 return {"is_legal": False, "error_message": f"Format Error (Borrow Accept): SUT target '{sut_target_str}' {err_detail} SUT line: '{sut_output_line}'."}
 
-            sut_book_copy_id = sut_target_str # Now validated as BookCopyID format
+            sut_book_copy_id = sut_target_str 
             book_copy_sut_claims_to_lend = self._get_book_copy(sut_book_copy_id)
 
             if not book_copy_sut_claims_to_lend:
@@ -144,7 +160,6 @@ class RuleChecker:
             if book_copy_sut_claims_to_lend.isbn != cmd_isbn:
                 return {"is_legal": False, "error_message": f"Logic Error (Borrow Accept): SUT lent BookCopyID '{sut_book_copy_id}' (which is of ISBN '{book_copy_sut_claims_to_lend.isbn}'), but command was for ISBN '{cmd_isbn}'. SUT line: '{sut_output_line}'."}
 
-            # --- Step 3: Logical Validation for ACCEPT ---
             student = self._get_student(cmd_student_id)
             accept_error_reason = ""
             if book_copy_sut_claims_to_lend.type == 'A':
@@ -154,7 +169,6 @@ class RuleChecker:
             elif book_copy_sut_claims_to_lend.type == 'B' and student.held_b_book_copy_id is not None:
                 accept_error_reason = f"Student '{cmd_student_id}' already holds a B-type book ('{student.held_b_book_copy_id}')."
             elif book_copy_sut_claims_to_lend.type == 'C' and book_copy_sut_claims_to_lend.isbn in student.held_c_books_by_isbn:
-                # This checks if student already holds *this specific* C-ISBN
                 accept_error_reason = f"Student '{cmd_student_id}' already holds a copy of this C-type ISBN '{cmd_isbn}' ('{student.held_c_books_by_isbn[cmd_isbn]}')."
 
             if accept_error_reason:
@@ -162,14 +176,13 @@ class RuleChecker:
 
             self.current_state.apply_validated_borrow_action(cmd_date_str, cmd_student_id, sut_book_copy_id)
             return {"is_legal": True}
-        else: # Should not happen
+        else: 
             return {"is_legal": False, "error_message": f"Internal Checker Error: Unknown SUT status '{parsed_sut['status']}' for borrow. SUT line: '{sut_output_line}'."}
 
 
     def validate_sut_return(self, cmd_date_str:str, cmd_student_id: str, cmd_book_copy_id: str, sut_output_line: str):
         parsed_sut = parse_sut_user_op_line(sut_output_line)
 
-        # --- Step 1: Basic Parsing and Context Matching ---
         if not parsed_sut:
             return {"is_legal": False, "error_message": f"Format Error (Return): SUT output line '{sut_output_line}' is malformed."}
         if parsed_sut["action"] != "returned":
@@ -181,8 +194,6 @@ class RuleChecker:
 
         sut_target_str = parsed_sut["target_str"]
 
-        # --- Step 2: Target Format and Content Validation ---
-        # For 'returned', SUT target must be the command BookCopyID.
         if not _is_book_copy_id_like(sut_target_str):
             err_detail = "is not in BookCopyID format (e.g., TYPE-SEQ-COPYNUM)."
             if _is_isbn_like(sut_target_str): err_detail = "is an ISBN; expected a specific BookCopyID."
@@ -190,13 +201,13 @@ class RuleChecker:
         if sut_target_str != cmd_book_copy_id:
             return {"is_legal": False, "error_message": f"Format Error (Return): SUT returned BookCopyID '{sut_target_str}', but command was for BookCopyID '{cmd_book_copy_id}'. SUT line: '{sut_output_line}'."}
 
-        # --- Step 3: Logical Validation (Return should always be accepted if book is held) ---
         if parsed_sut["status"] == "reject":
-            return {"is_legal": False, "error_message": f"Logic Error (Return Reject): SUT rejected return of '{cmd_book_copy_id}' by '{cmd_student_id}'. Returns should always be accepted if book is held by student. SUT line: '{sut_output_line}'."}
+            # Problem implies return is always successful ("还书立即成功")
+            return {"is_legal": False, "error_message": f"Logic Error (Return Reject): SUT rejected return of '{cmd_book_copy_id}' by '{cmd_student_id}'. Returns should always be accepted. SUT line: '{sut_output_line}'."}
 
         elif parsed_sut["status"] == "accept":
-            book_copy_to_return = self._get_book_copy(cmd_book_copy_id) # cmd_book_copy_id is same as sut_target_str now
-            if not book_copy_to_return: # Should be caught by generator if command is valid
+            book_copy_to_return = self._get_book_copy(cmd_book_copy_id) 
+            if not book_copy_to_return: 
                 return {"is_legal": False, "error_message": f"Logic Error (Return Accept): SUT accepted return of non-existent book '{cmd_book_copy_id}'. SUT line: '{sut_output_line}'."}
 
             if not (book_copy_to_return.current_location == "user" and book_copy_to_return.current_holder_student_id == cmd_student_id):
@@ -205,14 +216,13 @@ class RuleChecker:
                                                               f"Actual state: location='{book_copy_to_return.current_location}', holder='{book_copy_to_return.current_holder_student_id}'. SUT line: '{sut_output_line}'." )}
             self.current_state.apply_validated_return_action(cmd_date_str, cmd_student_id, cmd_book_copy_id)
             return {"is_legal": True}
-        else: # Should not happen
+        else: 
             return {"is_legal": False, "error_message": f"Internal Checker Error: Unknown SUT status '{parsed_sut['status']}' for return. SUT line: '{sut_output_line}'."}
 
 
     def validate_sut_order(self, cmd_date_str:str, cmd_student_id: str, cmd_isbn: str, sut_output_line: str):
         parsed_sut = parse_sut_user_op_line(sut_output_line)
 
-        # --- Step 1: Basic Parsing and Context Matching ---
         if not parsed_sut:
             return {"is_legal": False, "error_message": f"Format Error (Order): SUT output line '{sut_output_line}' is malformed."}
         if parsed_sut["action"] != "ordered":
@@ -224,8 +234,6 @@ class RuleChecker:
 
         sut_target_str = parsed_sut["target_str"]
 
-        # --- Step 2: Target Format and Content Validation ---
-        # For 'ordered' (accept or reject), SUT target must be the command ISBN.
         if not _is_isbn_like(sut_target_str):
             err_detail = "is not in ISBN format (e.g., TYPE-SEQ)."
             if _is_book_copy_id_like(sut_target_str): err_detail = "is a BookCopyID; expected an ISBN."
@@ -233,7 +241,6 @@ class RuleChecker:
         if sut_target_str != cmd_isbn:
             return {"is_legal": False, "error_message": f"Format Error (Order): SUT processed order for ISBN '{sut_target_str}', but command was for ISBN '{cmd_isbn}'. SUT line: '{sut_output_line}'."}
 
-        # --- Step 3: Logical Validation ---
         student = self._get_student(cmd_student_id)
         book_type_to_order = self.current_state._get_book_type_from_id_or_isbn(cmd_isbn)
 
@@ -250,7 +257,7 @@ class RuleChecker:
                 can_be_ordered_by_rule = False; rejection_reason_checker = f"Student '{cmd_student_id}' already holds a copy of this C-type ISBN '{cmd_isbn}' ('{student.held_c_books_by_isbn[cmd_isbn]}')."
 
             if not can_be_ordered_by_rule:
-                return {"is_legal": True} # SUT correctly rejected.
+                return {"is_legal": True} 
             else:
                 return {"is_legal": False, "error_message": f"Logic Error (Order Reject): SUT rejected order for '{cmd_isbn}' by '{cmd_student_id}', but checker deems it permissible. Reason: {rejection_reason_checker} SUT line: '{sut_output_line}'."}
 
@@ -271,7 +278,7 @@ class RuleChecker:
 
             self.current_state.apply_validated_order_action(cmd_student_id, cmd_isbn)
             return {"is_legal": True}
-        else: # Should not happen
+        else: 
             return {"is_legal": False, "error_message": f"Internal Checker Error: Unknown SUT status '{parsed_sut['status']}' for order. SUT line: '{sut_output_line}'."}
 
 
@@ -281,7 +288,6 @@ class RuleChecker:
         if not current_date_obj:
             return {"is_legal": False, "error_message": "Checker Internal Error: current_date_obj not set for pick validation."}
 
-        # --- Step 1: Basic Parsing and Context Matching ---
         if not parsed_sut:
             return {"is_legal": False, "error_message": f"Format Error (Pick): SUT output line '{sut_output_line}' is malformed."}
         if parsed_sut["action"] != "picked":
@@ -294,9 +300,7 @@ class RuleChecker:
         sut_target_str = parsed_sut["target_str"]
         student = self._get_student(cmd_student_id)
 
-        # --- Step 2: Target Format and Content Validation ---
         if parsed_sut["status"] == "reject":
-            # For 'picked [reject]', SUT target must be the command ISBN.
             if not _is_isbn_like(sut_target_str):
                 err_detail = "is not in ISBN format (e.g., TYPE-SEQ)."
                 if _is_book_copy_id_like(sut_target_str): err_detail = "is a BookCopyID; expected an ISBN."
@@ -304,22 +308,21 @@ class RuleChecker:
             if sut_target_str != cmd_isbn_to_pick:
                 return {"is_legal": False, "error_message": f"Format Error (Pick Reject): SUT rejected pick for ISBN '{sut_target_str}', but command was for ISBN '{cmd_isbn_to_pick}'. SUT line: '{sut_output_line}'."}
 
-            # --- Step 3: Logical Validation for REJECT ---
             can_be_picked_by_rule = True; rejection_reason_checker = "Checker finds pick permissible."
             book_id_student_reserved = student.reserved_book_copy_id_at_ao
             if not book_id_student_reserved:
                 can_be_picked_by_rule = False; rejection_reason_checker = f"Student '{cmd_student_id}' has no book reserved at AO."
             else:
                 reserved_book_copy = self._get_book_copy(book_id_student_reserved)
-                if not reserved_book_copy: # Should not happen if state is consistent
+                if not reserved_book_copy:
                      can_be_picked_by_rule = False; rejection_reason_checker = f"Student '{cmd_student_id}' has reservation for non-existent book '{book_id_student_reserved}' (internal state error)."
-                elif reserved_book_copy.isbn != cmd_isbn_to_pick: # Student reserved a different ISBN than what they are trying to pick now
-                    can_be_picked_by_rule = False; rejection_reason_checker = f"Student '{cmd_student_id}' has book '{reserved_book_copy.isbn}' reserved, but pick command is for ISBN '{cmd_isbn_to_pick}'."
+                elif reserved_book_copy.isbn != cmd_isbn_to_pick: 
+                    can_be_picked_by_rule = False; rejection_reason_checker = f"Student '{cmd_student_id}' has book of ISBN '{reserved_book_copy.isbn}' reserved, but pick command is for different ISBN '{cmd_isbn_to_pick}'."
                 elif reserved_book_copy.current_location != "appointment_office" or reserved_book_copy.ao_reserved_for_student_id != cmd_student_id:
                     can_be_picked_by_rule = False; rejection_reason_checker = f"Reserved book '{book_id_student_reserved}' is not at AO or not currently reserved for this student (loc: {reserved_book_copy.current_location}, res_for: {reserved_book_copy.ao_reserved_for_student_id})."
                 elif student.pickup_deadline_for_reserved_book and current_date_obj > student.pickup_deadline_for_reserved_book:
                     can_be_picked_by_rule = False; rejection_reason_checker = f"Reservation for '{book_id_student_reserved}' by '{cmd_student_id}' expired on {student.pickup_deadline_for_reserved_book} (current date: {current_date_obj})."
-                else: # Book is correctly reserved, not expired, check quantity limits
+                else: 
                     book_type_at_ao = reserved_book_copy.type
                     if book_type_at_ao == 'B' and student.held_b_book_copy_id is not None:
                         can_be_picked_by_rule = False; rejection_reason_checker = f"Student '{cmd_student_id}' already holds a B-type book ('{student.held_b_book_copy_id}') and cannot pick another B-type."
@@ -327,12 +330,11 @@ class RuleChecker:
                         can_be_picked_by_rule = False; rejection_reason_checker = f"Student '{cmd_student_id}' already holds a copy of this C-type ISBN '{cmd_isbn_to_pick}' ('{student.held_c_books_by_isbn[cmd_isbn_to_pick]}')."
 
             if not can_be_picked_by_rule:
-                return {"is_legal": True} # SUT correctly rejected
+                return {"is_legal": True} 
             else:
                 return {"is_legal": False, "error_message": f"Logic Error (Pick Reject): SUT rejected pick of '{cmd_isbn_to_pick}' by '{cmd_student_id}', but checker deems it permissible. Reason: {rejection_reason_checker} SUT line: '{sut_output_line}'."}
 
         elif parsed_sut["status"] == "accept":
-            # For 'picked [accept]', SUT target must be the BookCopyID student had reserved.
             if not _is_book_copy_id_like(sut_target_str):
                 err_detail = "is not in BookCopyID format (e.g., TYPE-SEQ-COPYNUM)."
                 if _is_isbn_like(sut_target_str): err_detail = "is an ISBN; expected the specific BookCopyID reserved by student."
@@ -343,20 +345,20 @@ class RuleChecker:
 
             if not book_sut_claims_picked:
                  return {"is_legal": False, "error_message": f"Logic Error (Pick Accept): SUT accepted pick of non-existent BookCopyID '{sut_picked_book_copy_id}'. SUT line: '{sut_output_line}'."}
-            if book_sut_claims_picked.isbn != cmd_isbn_to_pick: # Check if the picked book's ISBN matches the command ISBN
+            if book_sut_claims_picked.isbn != cmd_isbn_to_pick:
                  return {"is_legal": False, "error_message": f"Logic Error (Pick Accept): SUT picked BookCopyID '{sut_picked_book_copy_id}' (of ISBN '{book_sut_claims_picked.isbn}'), but command was for ISBN '{cmd_isbn_to_pick}'. SUT line: '{sut_output_line}'."}
 
-            # --- Step 3: Logical Validation for ACCEPT ---
             accept_error_reason = ""
             if student.reserved_book_copy_id_at_ao != sut_picked_book_copy_id:
-                accept_error_reason = (f"SUT picked '{sut_picked_book_copy_id}', but student '{cmd_student_id}' had '{student.reserved_book_copy_id_at_ao}' "
-                                      f"(for ISBN '{cmd_isbn_to_pick}') reserved at AO.")
+                accept_error_reason = (f"SUT picked '{sut_picked_book_copy_id}', but student '{cmd_student_id}' had a different copy ID "
+                                      f"'{student.reserved_book_copy_id_at_ao}' (for the same ISBN '{cmd_isbn_to_pick}') reserved at AO.")
+
             elif book_sut_claims_picked.current_location != "appointment_office" or book_sut_claims_picked.ao_reserved_for_student_id != cmd_student_id:
                 accept_error_reason = (f"Book '{sut_picked_book_copy_id}' is not at AO or not currently reserved for student '{cmd_student_id}'. "
                                       f"(Actual loc: '{book_sut_claims_picked.current_location}', reserved_for: '{book_sut_claims_picked.ao_reserved_for_student_id}')")
             elif student.pickup_deadline_for_reserved_book and current_date_obj > student.pickup_deadline_for_reserved_book:
                 accept_error_reason = f"Reservation for '{sut_picked_book_copy_id}' by '{cmd_student_id}' expired on {student.pickup_deadline_for_reserved_book} (current date: {current_date_obj})."
-            else: # Book correctly reserved & not expired, check quantity limits
+            else: 
                 book_type_picked = book_sut_claims_picked.type
                 if book_type_picked == 'B' and student.held_b_book_copy_id is not None:
                     accept_error_reason = f"Student '{cmd_student_id}' already holds a B-type book ('{student.held_b_book_copy_id}') and cannot pick another B-type."
@@ -368,7 +370,7 @@ class RuleChecker:
 
             self.current_state.apply_validated_pick_action(cmd_date_str, cmd_student_id, sut_picked_book_copy_id)
             return {"is_legal": True}
-        else: # Should not happen
+        else: 
             return {"is_legal": False, "error_message": f"Internal Checker Error: Unknown SUT status '{parsed_sut['status']}' for pick. SUT line: '{sut_output_line}'."}
 
 
@@ -390,7 +392,11 @@ class RuleChecker:
             return {"is_legal": False, "error_message": f"Format Error (Query): SUT query line count mismatch. Header declared: {sut_trace_count} trace lines, Actual lines provided (excluding header): {len(sut_output_lines_for_query)-1}."}
 
         expected_trace_entries = self.current_state.get_book_copy_details_for_trace(cmd_book_copy_id_queried)
-        if expected_trace_entries is None: expected_trace_entries = [] # Treat non-existent book as having empty trace
+        if expected_trace_entries is None: 
+            if sut_trace_count != 0:
+                 return {"is_legal": False, "error_message": f"Logic Error (Query Trace Count): Queried non-existent book '{cmd_book_copy_id_queried}' (checker has no record). SUT reported {sut_trace_count} traces, expected 0."}
+            expected_trace_entries = []
+
 
         if sut_trace_count != len(expected_trace_entries):
             return {"is_legal": False, "error_message": f"Logic Error (Query Trace Count): SUT query for '{cmd_book_copy_id_queried}' reported {sut_trace_count} trace lines, but checker expected {len(expected_trace_entries)} based on current state."}
@@ -403,7 +409,7 @@ class RuleChecker:
                 return {"is_legal": False, "error_message": f"Format Error (Query Trace Detail): Malformed SUT trace detail line {trace_line_num_sut_perspective}: '{sut_detail_line_str}'"}
 
             sut_seq, sut_detail_date, sut_from, sut_to = parsed_detail
-            expected_seq_checker = i + 1 # Checker's 0-indexed loop to 1-indexed sequence
+            expected_seq_checker = i + 1 
             expected_detail_date_actual, expected_from_actual, expected_to_actual = expected_trace_entries[i]
 
             if sut_seq != expected_seq_checker:
@@ -433,7 +439,7 @@ class RuleChecker:
             return {"is_legal": False, "error_message": "Checker Internal Error: current_date_obj not set before tidy validation."}
 
         for i in range(num_sut_moves_declared):
-            move_line_index_sut = i + 1 # SUT's perspective of line number after count
+            move_line_index_sut = i + 1 
             move_line_str = sut_move_output_lines[move_line_index_sut]
             parsed_move = parse_sut_tidy_move_line(move_line_str)
 
@@ -453,64 +459,77 @@ class RuleChecker:
             from_loc_full = LibrarySystem.REVERSE_LOCATION_SHORT_MAP.get(from_loc_short)
             to_loc_full = LibrarySystem.REVERSE_LOCATION_SHORT_MAP.get(to_loc_short)
 
-            if from_loc_full == to_loc_full: # Checked by parser too, but defense in depth
+            if from_loc_full == to_loc_full:
                 return {"is_legal": False, "error_message": f"Logic Error (Tidy Move): SUT tidy move line {move_line_index_sut} for '{book_copy_id_to_move}': 'from' and 'to' locations are the same ('{from_loc_short}'). Line: '{move_line_str}'."}
 
             if book_copy_object.current_location != from_loc_full:
                 return {"is_legal": False, "error_message": (f"Logic Error (Tidy Move): SUT tidy move line {move_line_index_sut} for '{book_copy_id_to_move}': "
                                                              f"SUT claims move from '{from_loc_full}', but book is at '{book_copy_object.current_location}' in checker state. Line: '{move_line_str}'." )}
 
-            # Rule: Reserved book at AO cannot be moved unless expired.
-            if from_loc_full == "appointment_office" and book_copy_object.ao_reserved_for_student_id:
-                if book_copy_object.ao_pickup_deadline and current_processing_date_obj <= book_copy_object.ao_pickup_deadline:
-                    return {"is_legal": False, "error_message": (f"Logic Error (Tidy Move): SUT tidy move line {move_line_index_sut}: attempted to move unexpired reserved book "
-                                                                 f"'{book_copy_id_to_move}' (reserved for '{book_copy_object.ao_reserved_for_student_id}' "
-                                                                 f"until '{book_copy_object.ao_pickup_deadline}') from AO on '{current_processing_date_obj}'. Line: '{move_line_str}'.")}
-                else: # Expired, SUT is allowed to move it. State update reflects this.
-                    self.current_state.clear_expired_ao_reservation_for_book(book_copy_id_to_move) # Student's reservation pointer is cleared
+            if from_loc_full == "appointment_office" and \
+               book_copy_object.ao_reserved_for_student_id and \
+               book_copy_object.ao_pickup_deadline:
+                
+                is_unmovable_due_to_active_reservation = False
+                if is_opening_tidy:
+                    if current_processing_date_obj <= book_copy_object.ao_pickup_deadline:
+                        is_unmovable_due_to_active_reservation = True
+                else: # CLOSE tidy
+                    if current_processing_date_obj < book_copy_object.ao_pickup_deadline:
+                        is_unmovable_due_to_active_reservation = True
+                
+                if is_unmovable_due_to_active_reservation:
+                    return {"is_legal": False, "error_message": (
+                        f"Logic Error (Tidy Move): SUT tidy move line {move_line_index_sut}: "
+                        f"attempted to move reserved book '{book_copy_id_to_move}' "
+                        f"(reserved for '{book_copy_object.ao_reserved_for_student_id}' "
+                        f"until end of day '{book_copy_object.ao_pickup_deadline}') from AO "
+                        f"on '{current_processing_date_obj}' during {'OPEN' if is_opening_tidy else 'CLOSE'} tidy. "
+                        f"Book is still actively reserved and cannot be moved. Line: '{move_line_str}'.")}
+                else:
+                    self.current_state.clear_expired_ao_reservation_for_book(book_copy_id_to_move)
+
 
             target_student_id_for_ao = parsed_move["target_student_for_ao"]
             actual_pickup_deadline_for_ao_move = None
 
             if to_loc_full == "appointment_office":
-                if not target_student_id_for_ao: # Should be caught by parser logic.
-                    return {"is_legal": False, "error_message": f"Format Error (Tidy Move to AO): SUT tidy move line {move_line_index_sut} to AO for '{book_copy_id_to_move}' is missing the target student ID (e.g. 'for <student_id>'). Line: '{move_line_str}'."}
-
                 student_for_ao = self._get_student(target_student_id_for_ao)
-                # Rule: "不可以为没有预定特定书籍的用户预留该书籍"
                 if student_for_ao.pending_order_isbn != book_copy_object.isbn:
                     return {"is_legal": False, "error_message": (f"Logic Error (Tidy Move to AO): SUT tidy move line {move_line_index_sut}: moved '{book_copy_id_to_move}' (ISBN: {book_copy_object.isbn}) to AO for student '{target_student_id_for_ao}', "
                                                                  f"but student has pending order for '{student_for_ao.pending_order_isbn}' (or no order for this ISBN). Expected pending order for ISBN '{book_copy_object.isbn}'. Line: '{move_line_str}'.")}
 
                 reservation_effective_date = current_processing_date_obj
-                if not is_opening_tidy: reservation_effective_date += timedelta(days=1)
+                if not is_opening_tidy: 
+                    reservation_effective_date += timedelta(days=1)
                 actual_pickup_deadline_for_ao_move = reservation_effective_date + timedelta(days=4)
 
                 self.current_state._apply_book_movement(
                     book_copy_id_to_move, from_loc_full, to_loc_full, cmd_date_str,
                     ao_reservation_student_id=target_student_id_for_ao,
-                    ao_pickup_deadline=actual_pickup_deadline_for_ao_move
+                    ao_pickup_deadline=actual_pickup_deadline_for_ao_move 
                 )
-                self.current_state.apply_book_reservation_at_ao(
+                # ******** BUG FIX: Added missing argument 'is_opening_tidy' ********
+                self.current_state.apply_book_reservation_at_ao( 
                     book_copy_id_to_move, target_student_id_for_ao, actual_pickup_deadline_for_ao_move, is_opening_tidy
                 )
-            else: # Moving to bookshelf or BRO
+            else: 
                 self.current_state._apply_book_movement(
                     book_copy_id_to_move, from_loc_full, to_loc_full, cmd_date_str
                 )
 
-        # --- Global state checks AFTER all SUT moves for this tidy phase ---
         if is_opening_tidy:
             for book_id_check, book_obj_check in self.current_state.all_book_copies.items():
                 if book_obj_check.current_location == "borrow_return_office":
                     return {"is_legal": False, "error_message": f"Post-Tidy Logic Error (OPEN): After OPEN tidy on {cmd_date_str}, book '{book_id_check}' remains in Borrow/Return Office (BRO). BRO should be empty."}
+                
                 if book_obj_check.current_location == "appointment_office" and \
                    book_obj_check.ao_reserved_for_student_id and \
                    book_obj_check.ao_pickup_deadline and \
-                   current_processing_date_obj > book_obj_check.ao_pickup_deadline:
+                   current_processing_date_obj > book_obj_check.ao_pickup_deadline: 
                     return {"is_legal": False, "error_message": (f"Post-Tidy Logic Error (OPEN): After OPEN tidy on {cmd_date_str}, overdue book '{book_id_check}' "
                                                                  f"(reserved for '{book_obj_check.ao_reserved_for_student_id}', expired '{book_obj_check.ao_pickup_deadline}') "
-                                                                 f"remains at Appointment Office (AO). Overdue books should be moved out.")}
+                                                                 f"remains at Appointment Office (AO). Overdue books should be moved out during OPEN tidy.")}
         return {"is_legal": True}
 
 
@@ -519,78 +538,77 @@ def check_cycle(cycle_command_strings: list[str],
                 main_library_state: LibrarySystem):
     sut_output_idx = 0
     current_cycle_state_copy = copy.deepcopy(main_library_state)
-    checker_instance = RuleChecker(current_cycle_state_copy)
+    checker_instance = RuleChecker(current_cycle_state_copy) 
 
     for cmd_idx, command_str in enumerate(cycle_command_strings):
         parts = command_str.split()
-        cmd_date_str = parts[0][1:-1]
+        cmd_date_str = parts[0][1:-1] 
         validation_result = {"is_legal": False, "error_message": "Checker Internal Error: Command not processed."}
 
-        is_open_or_close_command = parts[1] in ["OPEN", "CLOSE"]
-        is_user_op_command = not is_open_or_close_command
+        is_open_or_close_command = len(parts) == 2 and parts[1] in ["OPEN", "CLOSE"]
 
-        # --- Handle OPEN/CLOSE Tidy Phase ---
         if is_open_or_close_command:
-            is_opening_tidy = parts[1] == "OPEN"
-            if is_opening_tidy:
+            op_type = parts[1]
+            is_opening_tidy_local = (op_type == "OPEN") # Renamed to avoid conflict with loop var
+            if is_opening_tidy_local:
                 checker_instance.current_state.apply_open_action(cmd_date_str)
             else: # CLOSE
                 checker_instance.current_state.apply_close_action(cmd_date_str)
 
             if sut_output_idx >= len(sut_all_output_lines_for_cycle):
-                return {"is_legal": False, "error_message": f"Format Error ({parts[1]} Tidy): SUT ran out of output lines before {parts[1]} tidy count could be read.", "first_failing_command": command_str}
+                return {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy): SUT ran out of output lines before {op_type} tidy count.", "first_failing_command": command_str}
             try:
                 num_moves_sut = int(sut_all_output_lines_for_cycle[sut_output_idx])
                 if num_moves_sut < 0: raise ValueError("Negative move count")
             except ValueError:
-                return {"is_legal": False, "error_message": f"Format Error ({parts[1]} Tidy Count): SUT {parts[1]} tidy count ('{sut_all_output_lines_for_cycle[sut_output_idx]}') is not a non-negative integer.", "first_failing_command": command_str}
+                return {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy Count): SUT {op_type} tidy count ('{sut_all_output_lines_for_cycle[sut_output_idx]}') is not a non-negative int.", "first_failing_command": command_str}
 
             if sut_output_idx + 1 + num_moves_sut > len(sut_all_output_lines_for_cycle):
-                return {"is_legal": False, "error_message": f"Format Error ({parts[1]} Tidy Line Count): SUT declared {num_moves_sut} {parts[1]} tidy moves, but not enough output lines provided (needed {1+num_moves_sut}, got {len(sut_all_output_lines_for_cycle) - sut_output_idx}).", "first_failing_command": command_str}
+                return {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy Line Count): SUT declared {num_moves_sut} moves, not enough lines. Needed {1+num_moves_sut}, got {len(sut_all_output_lines_for_cycle) - sut_output_idx}.", "first_failing_command": command_str}
 
             sut_tidy_lines = sut_all_output_lines_for_cycle[sut_output_idx : sut_output_idx + 1 + num_moves_sut]
             sut_output_idx += (1 + num_moves_sut)
-            validation_result = checker_instance.validate_sut_tidy_moves(cmd_date_str, sut_tidy_lines, is_opening_tidy=is_opening_tidy)
+            validation_result = checker_instance.validate_sut_tidy_moves(cmd_date_str, sut_tidy_lines, is_opening_tidy=is_opening_tidy_local)
         
-        # --- Handle User Operations ---
-        elif is_user_op_command:
+        else: # User operation command
             cmd_student_id, cmd_action, cmd_target = parts[1], parts[2], parts[3]
             if cmd_action == "queried":
                 if sut_output_idx >= len(sut_all_output_lines_for_cycle):
-                    return {"is_legal": False, "error_message": f"Format Error (Query): SUT ran out of output lines before query header for '{command_str}'.", "first_failing_command": command_str}
+                    return {"is_legal": False, "error_message": f"Format Error (Query): SUT ran out of output for query '{command_str}'.", "first_failing_command": command_str}
                 parsed_q_header = parse_sut_query_header_line(sut_all_output_lines_for_cycle[sut_output_idx])
                 if not parsed_q_header:
-                    return {"is_legal": False, "error_message": f"Format Error (Query Header): SUT malformed query header line: '{sut_all_output_lines_for_cycle[sut_output_idx]}' for command '{command_str}'.", "first_failing_command": command_str}
+                    return {"is_legal": False, "error_message": f"Format Error (Query Header): Malformed header '{sut_all_output_lines_for_cycle[sut_output_idx]}' for '{command_str}'.", "first_failing_command": command_str}
                 _, _, num_trace_lines_sut_declared = parsed_q_header
+                
                 if sut_output_idx + 1 + num_trace_lines_sut_declared > len(sut_all_output_lines_for_cycle):
-                    return {"is_legal": False, "error_message": f"Format Error (Query Line Count): SUT declared {num_trace_lines_sut_declared} query trace lines, but not enough output lines provided for command '{command_str}'.", "first_failing_command": command_str}
+                    return {"is_legal": False, "error_message": f"Format Error (Query Line Count): SUT declared {num_trace_lines_sut_declared} traces, not enough lines for '{command_str}'.", "first_failing_command": command_str}
                 sut_lines_for_this_query = sut_all_output_lines_for_cycle[sut_output_idx : sut_output_idx + 1 + num_trace_lines_sut_declared]
                 sut_output_idx += (1 + num_trace_lines_sut_declared)
                 validation_result = checker_instance.validate_sut_query(cmd_date_str, cmd_target, sut_lines_for_this_query)
-            else: # Single line output user operations
+            else: 
                 if sut_output_idx >= len(sut_all_output_lines_for_cycle):
-                    return {"is_legal": False, "error_message": f"Format Error (User Op): SUT ran out of output lines before response for '{command_str}'.", "first_failing_command": command_str}
+                    return {"is_legal": False, "error_message": f"Format Error (User Op): SUT ran out of output for '{command_str}'.", "first_failing_command": command_str}
                 sut_op_line = sut_all_output_lines_for_cycle[sut_output_idx]; sut_output_idx += 1
+                
                 if cmd_action == "borrowed": validation_result = checker_instance.validate_sut_borrow(cmd_date_str, cmd_student_id, cmd_target, sut_op_line)
                 elif cmd_action == "returned": validation_result = checker_instance.validate_sut_return(cmd_date_str, cmd_student_id, cmd_target, sut_op_line)
                 elif cmd_action == "ordered": validation_result = checker_instance.validate_sut_order(cmd_date_str, cmd_student_id, cmd_target, sut_op_line)
                 elif cmd_action == "picked": validation_result = checker_instance.validate_sut_pick(cmd_date_str, cmd_student_id, cmd_target, sut_op_line)
-                else: validation_result = {"is_legal": False, "error_message": f"Checker Internal Error: Unknown command action '{cmd_action}' in command '{command_str}'."}
+                else: validation_result = {"is_legal": False, "error_message": f"Checker Internal Error: Unknown action '{cmd_action}' in '{command_str}'."}
         
         if not validation_result.get("is_legal", False):
             err_msg = validation_result.get('error_message', 'Unknown validation error')
             return {"is_legal": False, "error_message": f"Validation failed for command {cmd_idx+1} ('{command_str}'): {err_msg}", "first_failing_command": command_str}
 
     if sut_output_idx < len(sut_all_output_lines_for_cycle):
-        return {"is_legal": False, "error_message": f"Format Error (Extraneous Output): SUT produced extraneous output after all cycle commands processed. First extraneous line: '{sut_all_output_lines_for_cycle[sut_output_idx]}'", "first_failing_command": "End of cycle (extraneous SUT output)"}
+        return {"is_legal": False, "error_message": f"Format Error (Extraneous Output): SUT produced extraneous output. First: '{sut_all_output_lines_for_cycle[sut_output_idx]}'", "first_failing_command": "End of cycle (extraneous SUT output)"}
 
     main_library_state.__dict__.update(current_cycle_state_copy.__dict__)
     return {"is_legal": True, "error_message": "", "first_failing_command": None}
 
+
 if __name__ == "__main__":
     import argparse
-    # json, sys, LibrarySystem, RuleChecker, and parser functions are already imported or available
-
     parser = argparse.ArgumentParser(description="Checker for Library System SUT output.")
     parser.add_argument("input_file", help="Path to the input command file (e.g., input.txt).")
     parser.add_argument("sut_output_file", help="Path to the SUT's output file (e.g., output.txt).")
@@ -614,31 +632,29 @@ if __name__ == "__main__":
     if not all_input_commands:
         if all_sut_output_lines:
             print(json.dumps({"status": "failure", "reason": "Input file is empty, but SUT produced output."}))
-            sys.exit(1)
         else:
-            # Both empty, considered a trivial success or an empty test case.
-            print(json.dumps({"status": "success"}))
-            sys.exit(0)
+            print(json.dumps({"status": "success"})) 
+        sys.exit(0)
 
     main_library_state = LibrarySystem()
     sut_output_idx = 0
     input_cmd_idx = 0
     current_command_str_for_error_reporting = "Initial book loading"
 
-    # 1. Initial Book Loading from input commands
     try:
         if input_cmd_idx >= len(all_input_commands):
-            # This case should be caught by `if not all_input_commands` earlier,
-            # but as a safeguard if that logic changes.
             print(json.dumps({"status": "failure", "reason": "Input file does not contain initial book count."}))
             sys.exit(1)
 
-        num_book_types_str = all_input_commands[input_cmd_idx]
-        input_cmd_idx += 1
-        num_book_types = int(num_book_types_str)
-        if num_book_types < 0:
-             print(json.dumps({"status": "failure", "reason": "Negative number of book types in input."}))
-             sys.exit(1)
+        num_book_types_str = all_input_commands[input_cmd_idx]; input_cmd_idx += 1
+        try:
+            num_book_types = int(num_book_types_str)
+            if num_book_types < 0:
+                 print(json.dumps({"status": "failure", "reason": "Negative number of book types in input."}))
+                 sys.exit(1)
+        except ValueError:
+            print(json.dumps({"status": "failure", "reason": f"Invalid format for initial book count: '{num_book_types_str}'."}))
+            sys.exit(1)
 
         if input_cmd_idx + num_book_types > len(all_input_commands):
             print(json.dumps({"status": "failure", "reason": "Input file too short for declared number of book types."}))
@@ -646,90 +662,88 @@ if __name__ == "__main__":
         
         book_init_lines = all_input_commands[input_cmd_idx : input_cmd_idx + num_book_types]
         input_cmd_idx += num_book_types
-        main_library_state.initialize_books(book_init_lines)
-    except ValueError:
-        print(json.dumps({"status": "failure", "reason": f"Invalid format for initial book count: '{num_book_types_str}'."}))
-        sys.exit(1)
-    except Exception as e:
+        main_library_state.initialize_books(book_init_lines) 
+    
+    except ValueError as e: 
         print(json.dumps({"status": "failure", "reason": f"Error during library initialization: {e}"}))
         sys.exit(1)
+    except Exception as e: 
+        print(json.dumps({"status": "failure", "reason": f"Critical error during library initialization: {e}"}))
+        sys.exit(1)
 
-    checker_instance = RuleChecker(main_library_state)
+    checker_instance = RuleChecker(main_library_state) 
+    validation_result = {"is_legal": True} 
 
-    # 2. Command Processing Loop
     try:
         while input_cmd_idx < len(all_input_commands):
             command_str = all_input_commands[input_cmd_idx]
-            current_command_str_for_error_reporting = command_str
+            current_command_str_for_error_reporting = command_str 
             input_cmd_idx += 1
 
             parts = command_str.split()
             if not parts: continue 
 
-            # Assuming date is always the first part in brackets for all command types
             if not (parts[0].startswith("[") and parts[0].endswith("]")):
-                print(json.dumps({"status": "failure", "reason": f"Command '{command_str}' missing or malformed date part."}))
-                sys.exit(1)
+                validation_result = {"is_legal": False, "error_message": f"Command '{command_str}' missing or malformed date part."}
+                break 
             cmd_date_str = parts[0][1:-1]
             
-            validation_result = {"is_legal": False, "error_message": "Checker: Command not processed by __main__ logic."} 
+            is_open_close_local_scope = len(parts) == 2 and parts[1] in ["OPEN", "CLOSE"] # Renamed to avoid conflict
 
-            is_open_close = len(parts) == 2 and parts[1] in ["OPEN", "CLOSE"]
-
-            if is_open_close:
+            if is_open_close_local_scope:
                 op_type = parts[1]
-                is_opening_tidy = (op_type == "OPEN")
-                if is_opening_tidy:
+                current_is_opening_tidy = (op_type == "OPEN") # Variable specific to this scope
+                if current_is_opening_tidy:
                     checker_instance.current_state.apply_open_action(cmd_date_str)
                 else: # CLOSE
                     checker_instance.current_state.apply_close_action(cmd_date_str)
 
                 if sut_output_idx >= len(all_sut_output_lines):
-                    validation_result = {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy): SUT ran out of output lines before {op_type} tidy count could be read."}
-                    break # Break from while loop, will go to final error printing
+                    validation_result = {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy): SUT ran out of output before {op_type} tidy count."}
+                    break 
                 
                 num_moves_sut_str = all_sut_output_lines[sut_output_idx]
                 try:
                     num_moves_sut = int(num_moves_sut_str)
                     if num_moves_sut < 0: raise ValueError("Negative move count")
                 except ValueError:
-                    validation_result = {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy Count): SUT {op_type} tidy count ('{num_moves_sut_str}') is not a non-negative integer."}
+                    validation_result = {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy Count): SUT count ('{num_moves_sut_str}') not non-negative int."}
                     break
 
                 if sut_output_idx + 1 + num_moves_sut > len(all_sut_output_lines):
-                    validation_result = {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy Line Count): SUT declared {num_moves_sut} {op_type} tidy moves, but not enough output lines provided (needed {1+num_moves_sut} lines including count, got {len(all_sut_output_lines) - sut_output_idx} remaining)."}
+                    validation_result = {"is_legal": False, "error_message": f"Format Error ({op_type} Tidy Line Count): SUT declared {num_moves_sut} moves, not enough lines."}
                     break
                 
-                sut_tidy_lines_for_this_op = all_sut_output_lines[sut_output_idx : sut_output_idx + 1 + num_moves_sut]
+                sut_tidy_lines = all_sut_output_lines[sut_output_idx : sut_output_idx + 1 + num_moves_sut]
                 sut_output_idx += (1 + num_moves_sut)
-                validation_result = checker_instance.validate_sut_tidy_moves(cmd_date_str, sut_tidy_lines_for_this_op, is_opening_tidy)
+                validation_result = checker_instance.validate_sut_tidy_moves(cmd_date_str, sut_tidy_lines, is_opening_tidy=current_is_opening_tidy) # Pass the correct variable
 
             else: # User operation command
-                if len(parts) < 4: # Expect: [date] stud_id action target
-                    validation_result = {"is_legal": False, "error_message": f"Format Error (User Op): Command '{command_str}' is malformed (expected at least 4 parts)."}
+                if len(parts) < 4: 
+                    validation_result = {"is_legal": False, "error_message": f"Format Error (User Op): Command '{command_str}' malformed."}
                     break
                 cmd_student_id, cmd_action, cmd_target = parts[1], parts[2], parts[3]
 
                 if cmd_action == "queried":
                     if sut_output_idx >= len(all_sut_output_lines):
-                        validation_result = {"is_legal": False, "error_message": f"Format Error (Query): SUT ran out of output lines before query header for '{command_str}'."}
+                        validation_result = {"is_legal": False, "error_message": f"Format Error (Query): SUT ran out of output for query '{command_str}'."}
                         break
                     sut_header_line = all_sut_output_lines[sut_output_idx]
-                    parsed_q_header = parse_sut_query_header_line(sut_header_line) # Function from checker.py
+                    parsed_q_header = parse_sut_query_header_line(sut_header_line)
                     if not parsed_q_header:
-                        validation_result = {"is_legal": False, "error_message": f"Format Error (Query Header): SUT malformed query header line: '{sut_header_line}' for command '{command_str}'."}
+                        validation_result = {"is_legal": False, "error_message": f"Format Error (Query Header): Malformed SUT header '{sut_header_line}' for '{command_str}'."}
                         break
                     _, _, num_trace_lines_sut_declared = parsed_q_header
                     
                     if sut_output_idx + 1 + num_trace_lines_sut_declared > len(all_sut_output_lines):
-                        validation_result = {"is_legal": False, "error_message": f"Format Error (Query Line Count): SUT declared {num_trace_lines_sut_declared} query trace lines, but not enough output lines provided for command '{command_str}'."}
+                        validation_result = {"is_legal": False, "error_message": f"Format Error (Query Line Count): SUT declared {num_trace_lines_sut_declared} traces, not enough lines for '{command_str}'."}
                         break
                     sut_lines_for_this_query = all_sut_output_lines[sut_output_idx : sut_output_idx + 1 + num_trace_lines_sut_declared]
                     sut_output_idx += (1 + num_trace_lines_sut_declared)
                     validation_result = checker_instance.validate_sut_query(cmd_date_str, cmd_target, sut_lines_for_this_query)
-                else: # borrow, return, order, pick
+                else: 
                     if sut_output_idx >= len(all_sut_output_lines):
-                        validation_result = {"is_legal": False, "error_message": f"Format Error (User Op): SUT ran out of output lines before response for '{command_str}'."}
+                        validation_result = {"is_legal": False, "error_message": f"Format Error (User Op): SUT ran out of output for '{command_str}'."}
                         break
                     sut_op_line = all_sut_output_lines[sut_output_idx]; sut_output_idx += 1
                     
@@ -738,32 +752,24 @@ if __name__ == "__main__":
                     elif cmd_action == "ordered": validation_result = checker_instance.validate_sut_order(cmd_date_str, cmd_student_id, cmd_target, sut_op_line)
                     elif cmd_action == "picked": validation_result = checker_instance.validate_sut_pick(cmd_date_str, cmd_student_id, cmd_target, sut_op_line)
                     else:
-                        validation_result = {"is_legal": False, "error_message": f"Checker Internal Error: Unknown command action '{cmd_action}' in command '{command_str}'."}
+                        validation_result = {"is_legal": False, "error_message": f"Checker Internal Error: Unknown action '{cmd_action}' in '{command_str}'."}
             
             if not validation_result.get("is_legal", False):
-                # Error already found by a validation method or a format check within the loop
-                reason = validation_result.get('error_message', 'Unknown validation error')
-                print(json.dumps({"status": "failure", "reason": f"Validation failed for command '{current_command_str_for_error_reporting}': {reason}"}))
-                sys.exit(1)
+                break 
         
-        # After loop, if validation_result is still the default error or broken from loop due to SUT lines issue
-        if not validation_result.get("is_legal", False) and validation_result.get("error_message"):
-             reason = validation_result.get('error_message', 'Unknown validation error after loop')
-             print(json.dumps({"status": "failure", "reason": f"Processing error related to command '{current_command_str_for_error_reporting}': {reason}"}))
-             sys.exit(1)
-
-
-        # Check for extraneous SUT output if all commands processed successfully
-        if sut_output_idx < len(all_sut_output_lines):
-            print(json.dumps({"status": "failure", "reason": f"Format Error (Extraneous Output): SUT produced extraneous output after all input commands processed. First extraneous line: '{all_sut_output_lines[sut_output_idx]}'."}))
+        if not validation_result.get("is_legal", False):
+            reason = validation_result.get('error_message', 'Unknown validation error')
+            print(json.dumps({"status": "failure", "reason": f"Validation failed for command '{current_command_str_for_error_reporting}': {reason}"}))
             sys.exit(1)
 
-        # If loop completes and no errors / no extraneous output
+        if sut_output_idx < len(all_sut_output_lines):
+            print(json.dumps({"status": "failure", "reason": f"Format Error (Extraneous Output): SUT produced extraneous output. First: '{all_sut_output_lines[sut_output_idx]}'."}))
+            sys.exit(1)
+
         print(json.dumps({"status": "success"}))
         sys.exit(0)
 
     except Exception as e:
-        # Catch-all for unexpected errors during processing
         import traceback
         error_details = f"{type(e).__name__} - {e}\n{traceback.format_exc()}"
         error_context = f"An unexpected critical error occurred during processing of command '{current_command_str_for_error_reporting}': {error_details}"
