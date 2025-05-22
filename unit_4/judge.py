@@ -78,7 +78,9 @@ class UMLOperation(UMLElement):
 
     def add_parameter(self, name, raw_param_type, id_to_name_map):
         self.parameters.append({'name': name, 'type': resolve_uml_type(raw_param_type, id_to_name_map), 'raw_type': raw_param_type})
-    def __repr__(self): return f"UMLOp({self.name}({', '.join(f'{p["name"]}:{p["type"]}' for p in self.parameters)}):{self.return_type}, {self.visibility}, static={self.is_static})"
+    def __repr__(self):
+        params = ', '.join('{}:{}'.format(p["name"], p["type"]) for p in self.parameters)
+        return f"UMLOp({self.name}({params}):{self.return_type}, {self.visibility}, static={self.is_static})"
 
 class UMLClass:
     def __init__(self, name):
@@ -103,7 +105,9 @@ class JavaMethod(JavaElement):
         self.parameters, self.return_type, self.is_static, self.is_constructor = \
             [], return_type if return_type is not None else "void", is_static, is_constructor
     def add_parameter(self, name, param_type_str): self.parameters.append({'name': name, 'type': param_type_str})
-    def __repr__(self): return f"JavaMethod({self.name}({', '.join(f'{p["name"]}:{p["type"]}' for p in self.parameters)}):{self.return_type}, {self.visibility}, static={self.is_static})"
+    def __repr__(self):
+        params = ', '.join(f"{p['name']}:{p['type']}" for p in self.parameters)
+        return f"JavaMethod({self.name}({params}):{self.return_type}, {self.visibility}, static={self.is_static})"
 
 class JavaClass:
     def __init__(self, name, filepath=None):
@@ -237,7 +241,7 @@ def normalize_uml_type(type_str):
 
 def normalize_java_type_str(type_str):
     if not isinstance(type_str, str): return "unknown_input_to_normalize_java"
-    common_mappings = {"java.lang.String": "String", "String": "String", "java.time.LocalDate": "LocalDate", "LocalDate": "LocalDate", "java.util.List": "List", "List": "List", "java.util.LinkedList": "LinkedList", "LinkedList": "LinkedList", "java.util.HashMap" : "HashMap", "HashMap": "HashMap", "java.util.ArrayList": "ArrayList", "ArrayList": "ArrayList", "java.util.Map": "Map", "Map": "Map", "java.util.Set": "Set", "Set": "Set", "boolean": "boolean", "Boolean": "Boolean", "int": "int", "Integer": "Integer", "char": "char", "Character": "Character", "double": "double", "Double": "Double", "long": "long", "Long": "Long", "float": "float", "Float": "Float", "short": "short", "Short": "Short", "byte": "byte", "Byte": "Byte", "void": "void"}
+    common_mappings = {"java.lang.String": "String", "String": "String", "java.time.LocalDate": "LocalDate", "LocalDate": "LocalDate", "java.util.List": "List", "List": "List", "java.util.LinkedList": "LinkedList", "LinkedList": "LinkedList", "java.util.HashMap" : "HashMap", "HashMap": "HashMap","java.util.HashSet": "HashSet", "HashSet": "HashSet", "java.util.ArrayList": "ArrayList", "ArrayList": "ArrayList", "java.util.Map": "Map", "Map": "Map", "java.util.Set": "Set", "Set": "Set", "boolean": "boolean", "Boolean": "Boolean", "int": "int", "Integer": "Integer", "char": "char", "Character": "Character", "double": "double", "Double": "Double", "long": "long", "Long": "Long", "float": "float", "Float": "Float", "short": "short", "Short": "Short", "byte": "byte", "Byte": "Byte", "void": "void"}
     if type_str in common_mappings: return common_mappings[type_str]
     temp_type = type_str; is_array = False
     if temp_type.endswith("[]"): is_array = True; temp_type = temp_type[:-2]
