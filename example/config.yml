@@ -23,6 +23,7 @@ test:
   base_wall_time_per_cycle: 2.5             # (seconds) Estimated time per cycle in driver.py
   base_fixed_overhead_time: 5.0             # (seconds) Estimated fixed overhead for driver
   default_estimated_wall_time: 50.0         # (seconds) Fallback if --max_cycles not in preset
-  parallel: 16
+  cycle_cpu_timeout: 0.2
+  parallel: 8
   debug: False
   cleanup: True

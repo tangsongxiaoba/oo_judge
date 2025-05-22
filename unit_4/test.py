@@ -21,9 +21,10 @@ import json
 # --- Default Configuration, will be replaced by config.yml ---
 CPU_TIME_LIMIT = 10.0  # seconds for the driver process
 MIN_WALL_TIME_LIMIT = 15.0 # Minimum floor for any wall time limit
-BASE_WALL_TIME_PER_CYCLE = 2.5 # Estimated time per cycle in driver.py
+BASE_WALL_TIME_PER_CYCLE = 2.5 # Estimated time per cycle in driver.py (used if new formula component missing)
 BASE_FIXED_OVERHEAD_TIME = 5.0 # Estimated fixed overhead for driver (startup, SUT init, etc.)
 DEFAULT_ESTIMATED_WALL_TIME = 50.0 # Fallback wall time if --max_cycles not in preset
+DEFAULT_CYCLE_CPU_TIMEOUT_FROM_CONFIG = 2.0 # Default for config's cycle_cpu_timeout, passed to driver's --cycle_timeout
 
 ENABLE_DETAILED_DEBUG = False
 LOG_DIR = "logs"
@@ -49,6 +50,7 @@ class JarTester:
     _gen_arg_presets = [] # List of preset dictionaries
     _raw_preset_commands = [] # List of raw preset strings (for logging)
     _loaded_preset_commands = []
+    _cycle_cpu_timeout_from_config = DEFAULT_CYCLE_CPU_TIMEOUT_FROM_CONFIG # Value from config for driver's --cycle_timeout
 
     _history_lock = threading.Lock()
     _log_lock = threading.Lock()
@@ -147,6 +149,7 @@ class JarTester:
         result["driver_input_log_path"] = driver_sut_input_log
         result["driver_sut_output_log_path"] = driver_sut_output_log
 
+        # driver_args_list already contains preset args, possibly --cycle_timeout from config, and --seed
         command_for_driver = [
             sys.executable, JarTester._driver_script_path, jar_under_test_path
         ] + driver_args_list + ["-i", driver_sut_input_log, "-o", driver_sut_output_log]
@@ -260,7 +263,7 @@ class JarTester:
     def _display_and_log_results(round_num, results, round_preset_cmd_with_seed, calculated_round_wall_limit): # param renamed
         log_lines = []
         results.sort(key=lambda x: (0 if x.get("status") == "CORRECT" else 1, x.get("jar_file", "")))
-        round_header = f"\n--- Test Round {round_num} Results (Preset: {round_preset_cmd_with_seed} | Wall Limit Used: {calculated_round_wall_limit:.1f}s) ---"
+        round_header = f"\n--- Test Round {round_num} Results (Effective Args+Seed: {round_preset_cmd_with_seed} | Wall Limit Used: {calculated_round_wall_limit:.1f}s) ---"
         header = f"{'JAR':<25} | {'Status':<18} | {'CPU(s)':<8} | {'Wall(s)':<8} | Details"
         separator = "-" * len(header)
         log_lines.append(round_header.replace(" Results ", " Summary "))
@@ -278,7 +281,7 @@ class JarTester:
                 if error_log_header_needed:
                     log_lines.append(f"\n--- Test Round {round_num} Error Details ---"); log_lines.append(f"Seed Used: {r.get('seed_used', '<N/A>')}"); error_log_header_needed = False
                 log_lines.append(f"\n--- Error for: {r['jar_file']} (Status: {status}) ---")
-                log_lines.append(f"  Preset: {round_preset_cmd_with_seed}\n  Wall Limit Applied: {calculated_round_wall_limit:.1f}s\n  Error: {r.get('error_details', '')}")
+                log_lines.append(f"  Effective Args+Seed: {round_preset_cmd_with_seed}\n  Wall Limit Applied: {calculated_round_wall_limit:.1f}s\n  Error: {r.get('error_details', '')}")
                 log_lines.append(f"  Driver SUT Input Log: {r.get('driver_input_log_path', '<N/A>')}\n  Driver SUT Output Log: {r.get('driver_sut_output_log_path', '<N/A>')}")
                 log_lines.append("  --- Driver Stdout (JSON) ---\n" + "".join(r.get('driver_stdout', ['<empty>'])) + "\n  --- End Driver Stdout ---")
                 log_lines.append("  --- Driver Stderr ---\n" + "".join(r.get('driver_stderr', ['<empty>'])) + "\n  --- End Driver Stderr ---")
@@ -324,7 +327,7 @@ class JarTester:
     def _signal_handler(sig, frame): # (Unchanged)
         if not JarTester._interrupted: print("\nCtrl+C detected. Stopping...", file=sys.stderr); JarTester._interrupted = True
 
-    # MODIFIED: _initialize_presets to find --max_cycles
+    # MODIFIED: _initialize_presets to find --max_cycles (no change in this method for current request, parsing is generic)
     @staticmethod
     def _initialize_presets():
         JarTester._gen_arg_presets = [] # List of dicts
@@ -345,7 +348,7 @@ class JarTester:
                             args_dict['_max_cycles_for_wall_time'] = int(parts[i+1]) # Store specially
                         except ValueError:
                             print(f"WARNING: Invalid value for {arg} in preset '{cmd_str}'. Ignoring for wall time calculation.", file=sys.stderr)
-                # Generic argument parsing
+                # Generic argument parsing (will pick up --cycle_timeout if in preset)
                 if i + 1 < len(parts) and not parts[i+1].startswith('-'):
                     value_str = parts[i+1]
                     try: value = int(value_str)
@@ -369,42 +372,67 @@ class JarTester:
             if value is not True: args_list.append(str(value))
         return args_list
 
-    # MODIFIED: _run_one_round for wall time calculation
+    # MODIFIED: _run_one_round for wall time calculation and driver arg passing
     @staticmethod
     def _run_one_round(round_num):
         if JarTester._interrupted: return None
         thread_name = threading.current_thread().name
         print(f"INFO [{thread_name}]: Starting Test Round {round_num}")
 
-        # Wall time calculation based on preset
         round_wall_time_limit = DEFAULT_ESTIMATED_WALL_TIME # Fallback
-        selected_preset_cmd_str = "<Not Selected>"
+        _raw_preset_cmd_str_from_yml = "<Not Selected>"
+        effective_args_str_for_current_round = "<Not Set>"
+        round_preset_cmd_with_seed_for_logging = "<Not Set>" # For display_and_log (effective args + seed)
+        final_driver_args_list_for_subprocess = []
         current_seed = -1
-        full_driver_args_str_with_seed = "<Not Set>"
 
         try:
-            if not JarTester._gen_arg_presets: print(f"ERROR [{thread_name}]: No driver presets.", file=sys.stderr); return None
+            if not JarTester._gen_arg_presets:
+                print(f"ERROR [{thread_name}]: No driver presets.", file=sys.stderr)
+                return None
             preset_index = random.randrange(len(JarTester._gen_arg_presets))
-            selected_preset_dict = JarTester._gen_arg_presets[preset_index] # This is a dict
-            selected_preset_cmd_str = JarTester._raw_preset_commands[preset_index] # This is a string
+            selected_preset_dict = JarTester._gen_arg_presets[preset_index]
+            _raw_preset_cmd_str_from_yml = JarTester._raw_preset_commands[preset_index]
             
             # Calculate wall time limit
             max_cycles_from_preset = selected_preset_dict.get('_max_cycles_for_wall_time')
             if isinstance(max_cycles_from_preset, int) and max_cycles_from_preset > 0:
-                estimated_time = (max_cycles_from_preset * BASE_WALL_TIME_PER_CYCLE) + BASE_FIXED_OVERHEAD_TIME
+                # New formula: cycle_cpu_timeout_from_config * 1.1 * max_cycles + fixed_overhead
+                estimated_time = (max_cycles_from_preset * JarTester._cycle_cpu_timeout_from_config * 1.1) + BASE_FIXED_OVERHEAD_TIME
                 round_wall_time_limit = max(MIN_WALL_TIME_LIMIT, estimated_time)
-                debug_print(f"Round {round_num}: Using {max_cycles_from_preset} cycles for wall time. Estimated: {estimated_time:.1f}s. Actual limit: {round_wall_time_limit:.1f}s.")
+                debug_print(f"Round {round_num}: Using {max_cycles_from_preset} cycles and driver cycle timeout {JarTester._cycle_cpu_timeout_from_config:.1f}s for wall time. Estimated: {estimated_time:.1f}s. Actual limit: {round_wall_time_limit:.1f}s.")
             else:
                 round_wall_time_limit = DEFAULT_ESTIMATED_WALL_TIME # Use default if no/invalid max_cycles
                 debug_print(f"Round {round_num}: --max_cycles not in preset or invalid. Using default wall limit: {round_wall_time_limit:.1f}s (min enforced: {MIN_WALL_TIME_LIMIT:.1f}s).")
-                round_wall_time_limit = max(MIN_WALL_TIME_LIMIT, round_wall_time_limit)
+                round_wall_time_limit = max(MIN_WALL_TIME_LIMIT, round_wall_time_limit) # Ensure min is met
 
-
+            # Prepare driver arguments
             driver_args_list_from_preset = JarTester._preset_dict_to_arg_list(selected_preset_dict)
+            
+            # Check if --cycle_timeout is already part of the preset (by checking the original dict)
+            has_cycle_timeout_in_preset = '--cycle_timeout' in selected_preset_dict
+            # driver.py uses '--cycle_timeout'. We assume no short alias for simplicity here.
+
+            effective_driver_args_list = list(driver_args_list_from_preset) # Start with preset args
+            
+            # If preset doesn't specify --cycle_timeout, add it from config
+            if not has_cycle_timeout_in_preset:
+                effective_driver_args_list.extend(["--cycle_timeout", str(JarTester._cycle_cpu_timeout_from_config)])
+            
+            effective_args_str_for_current_round = " ".join(effective_driver_args_list)
+
             current_seed = int(time.time() * 1000) + round_num
-            driver_args_list_with_seed = driver_args_list_from_preset + ["--seed", str(current_seed)]
-            full_driver_args_str_with_seed = f"{selected_preset_cmd_str} --seed {current_seed}"
-            debug_print(f"Round {round_num}: Driver Args: {full_driver_args_str_with_seed}, Final Wall Limit: {round_wall_time_limit:.2f}s")
+            final_driver_args_list_for_subprocess = effective_driver_args_list + ["--seed", str(current_seed)]
+            
+            round_preset_cmd_with_seed_for_logging = f"{effective_args_str_for_current_round} --seed {current_seed}"
+
+            debug_print(f"Round {round_num}: Raw preset from yml: '{_raw_preset_cmd_str_from_yml}'")
+            debug_print(f"Round {round_num}: Effective driver args (preset + config merge, before seed): {effective_driver_args_list}")
+            debug_print(f"Round {round_num}: Effective driver args string (for logging): '{effective_args_str_for_current_round}'")
+            debug_print(f"Round {round_num}: Seed used: {current_seed}")
+            debug_print(f"Round {round_num}: Final driver args list for subprocess call: {final_driver_args_list_for_subprocess}")
+            debug_print(f"Round {round_num}: Final args string for display/logging: '{round_preset_cmd_with_seed_for_logging}'")
+            debug_print(f"Round {round_num}: Final Wall Limit: {round_wall_time_limit:.2f}s")
 
             if JarTester._interrupted: return None
 
@@ -413,7 +441,8 @@ class JarTester:
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers_per_round, thread_name_prefix=f'DriverExec_R{round_num}') as executor:
                 if JarTester._interrupted: return None
                 future_to_jar = {
-                    executor.submit(JarTester._run_single_driver_instance, jar_file, list(driver_args_list_with_seed), round_wall_time_limit, round_num, current_seed): jar_file
+                    # Pass final_driver_args_list_for_subprocess, which includes preset, conditional config, and seed
+                    executor.submit(JarTester._run_single_driver_instance, jar_file, list(final_driver_args_list_for_subprocess), round_wall_time_limit, round_num, current_seed): jar_file
                     for jar_file in JarTester._jar_files
                 }
                 for future in concurrent.futures.as_completed(future_to_jar): # (Rest of _run_one_round logic unchanged from previous driver integration)
@@ -427,7 +456,7 @@ class JarTester:
                             "cpu_time": 0, "wall_time": 0, "driver_stdout": [], "driver_stderr": [f"Tester exc: {exc}", traceback.format_exc()],
                             "seed_used": current_seed, "round_num": round_num })
             if JarTester._interrupted: return None
-            # (Error log file generation for failed JARs - unchanged)
+            
             failed_jars_in_round = [r for r in results_this_round if r.get("status") not in ["CORRECT", "INTERRUPTED"]]
 
             if failed_jars_in_round:
@@ -435,11 +464,12 @@ class JarTester:
                 error_log_filepath = os.path.abspath(os.path.join(LOG_DIR, error_log_filename))
                 debug_print(f"Round {round_num}: Failures detected. Logging errors to separate file: {error_log_filepath}")
                 try:
-                    os.makedirs(LOG_DIR, exist_ok=True) # 确保日志目录存在
+                    os.makedirs(LOG_DIR, exist_ok=True) 
                     with open(error_log_filepath, "w", encoding="utf-8", errors='replace') as f_err:
                         f_err.write(f"--- Error Log for Test Round {round_num} ---\n")
                         f_err.write(f"Seed Used: {current_seed}\n")
-                        f_err.write(f"Driver Args (Preset + Seed): {full_driver_args_str_with_seed}\n")
+                        f_err.write(f"Effective Driver Args (Preset/Config + Seed): {round_preset_cmd_with_seed_for_logging}\n")
+                        f_err.write(f"Raw Preset from yml: {_raw_preset_cmd_str_from_yml}\n")
                         f_err.write(f"Wall Time Limit Applied: {round_wall_time_limit:.1f}s\n")
                         f_err.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
                         f_err.write("-" * 40 + "\n\n")
@@ -452,75 +482,64 @@ class JarTester:
                             f_err.write(f"Error Details: {r_fail.get('error_details', '')}\n")
                             f_err.write(f"Driver SUT Input Log Path: {r_fail.get('driver_input_log_path', '<Not Available>')}\n")
                             f_err.write(f"Driver SUT Output Log Path: {r_fail.get('driver_sut_output_log_path', '<Not Available>')}\n")
-
                             f_err.write("--- Driver Stdout (JSON if any) ---\n")
                             driver_stdout_content = "".join(r_fail.get('driver_stdout', ['<No stdout captured from driver>']))
                             f_err.write(driver_stdout_content.strip() + "\n")
                             f_err.write("--- End Driver Stdout ---\n\n")
-
                             f_err.write("--- Driver Stderr ---\n")
                             driver_stderr_content = "".join(r_fail.get('driver_stderr', ['<No stderr captured from driver>']))
-                            MAX_ERR_LOG_LINES = 200 # 限制stderr的行数，避免日志过大
+                            MAX_ERR_LOG_LINES = 200 
                             stderr_lines = driver_stderr_content.strip().splitlines()
                             for i, err_line in enumerate(stderr_lines):
-                                if i < MAX_ERR_LOG_LINES:
-                                    f_err.write(f"  {err_line.strip()}\n")
-                                elif i == MAX_ERR_LOG_LINES:
-                                    f_err.write(f"  ... (driver stderr truncated after {MAX_ERR_LOG_LINES} lines)\n")
-                                    break
-                            if not stderr_lines:
-                                f_err.write("  <No stderr content>\n")
-                            elif len(stderr_lines) <= MAX_ERR_LOG_LINES:
-                                f_err.write("  <End of Driver Stderr>\n")
+                                if i < MAX_ERR_LOG_LINES: f_err.write(f"  {err_line.strip()}\n")
+                                elif i == MAX_ERR_LOG_LINES: f_err.write(f"  ... (driver stderr truncated after {MAX_ERR_LOG_LINES} lines)\n"); break
+                            if not stderr_lines: f_err.write("  <No stderr content>\n")
+                            elif len(stderr_lines) <= MAX_ERR_LOG_LINES: f_err.write("  <End of Driver Stderr>\n")
                             f_err.write("--- End Driver Stderr ---\n\n")
                             f_err.write("-" * 20 + "\n\n")
-                    
                     print(f"INFO [{thread_name}] Round {round_num}: Errors occurred. Details saved to {error_log_filepath}")
-
                 except Exception as e_err_log:
                     print(f"ERROR [{thread_name}] Round {round_num}: Failed to write separate error log file {error_log_filepath}: {e_err_log}", file=sys.stderr)
-            # (Cleanup logic - unchanged)
-            if CLEANUP_SUCCESSFUL_ROUNDS and results_this_round: # (cleanup logic as before)
+            
+            if CLEANUP_SUCCESSFUL_ROUNDS and results_this_round: 
                 all_passed_this_round = all(r.get("status") == "CORRECT" for r in results_this_round)
                 files_to_remove_in_cleanup = []
                 if all_passed_this_round:
                     debug_print(f"Round {round_num}: All JARs passed. Cleaning up all driver SUT log files for this round...")
                     for r_clean in results_this_round:
-                        sut_input_log = r_clean.get("driver_input_log_path")
-                        sut_output_log = r_clean.get("driver_sut_output_log_path")
+                        sut_input_log = r_clean.get("driver_input_log_path"); sut_output_log = r_clean.get("driver_sut_output_log_path")
                         if sut_input_log and os.path.exists(sut_input_log): files_to_remove_in_cleanup.append(sut_input_log)
                         if sut_output_log and os.path.exists(sut_output_log): files_to_remove_in_cleanup.append(sut_output_log)
-                else: # Some JARs failed
+                else: 
                     debug_print(f"Round {round_num}: Some JARs failed. Cleaning up driver SUT log files only for CORRECT runs...")
                     for r_clean in results_this_round:
                         if r_clean.get("status") == "CORRECT":
-                            sut_input_log = r_clean.get("driver_input_log_path")
-                            sut_output_log = r_clean.get("driver_sut_output_log_path")
+                            sut_input_log = r_clean.get("driver_input_log_path"); sut_output_log = r_clean.get("driver_sut_output_log_path")
                             if sut_input_log and os.path.exists(sut_input_log): files_to_remove_in_cleanup.append(sut_input_log)
                             if sut_output_log and os.path.exists(sut_output_log): files_to_remove_in_cleanup.append(sut_output_log)
-                        else: # Failed JAR, keep its logs
-                            sut_input_log = r_clean.get("driver_input_log_path")
-                            sut_output_log = r_clean.get("driver_sut_output_log_path")
+                        else: 
+                            sut_input_log = r_clean.get("driver_input_log_path"); sut_output_log = r_clean.get("driver_sut_output_log_path")
                             if sut_input_log: debug_print(f"  Keeping failed SUT input log: {sut_input_log}")
                             if sut_output_log: debug_print(f"  Keeping failed SUT output log: {sut_output_log}")
-                
                 for file_path_to_remove in files_to_remove_in_cleanup:
-                    try:
-                        os.remove(file_path_to_remove)
-                        debug_print(f"  Deleted (cleanup): {file_path_to_remove}")
-                    except OSError as e_del:
-                        print(f"WARNING [{thread_name}] Round {round_num}: Failed to delete temp file {file_path_to_remove}: {e_del}", file=sys.stderr)
+                    try: os.remove(file_path_to_remove); debug_print(f"  Deleted (cleanup): {file_path_to_remove}")
+                    except OSError as e_del: print(f"WARNING [{thread_name}] Round {round_num}: Failed to delete temp file {file_path_to_remove}: {e_del}", file=sys.stderr)
+            
             round_results_package = {
-                "round_num": round_num, "results": results_this_round, "preset_cmd": full_driver_args_str_with_seed,
-                "wall_limit": round_wall_time_limit, "seed_used": current_seed }
-            print(f"INFO [{thread_name}]: Finished Test Round {round_num} (Args: {selected_preset_cmd_str})")
+                "round_num": round_num, "results": results_this_round,
+                "preset_cmd": round_preset_cmd_with_seed_for_logging, # This now reflects effective args + seed
+                "wall_limit": round_wall_time_limit, "seed_used": current_seed
+            }
+            print(f"INFO [{thread_name}]: Finished Test Round {round_num} (Effective Args: {effective_args_str_for_current_round}, Seed: {current_seed})")
             return round_results_package
         except Exception as e_round:
-            print(f"\nFATAL ERROR in worker for Round {round_num}: {e_round}", file=sys.stderr); return None
+            print(f"\nFATAL ERROR in worker for Round {round_num}: {e_round}\n{traceback.format_exc()}", file=sys.stderr)
+            return None
 
     @staticmethod
     def test():
-        global ENABLE_DETAILED_DEBUG, LOG_DIR, TMP_DIR, CLEANUP_SUCCESSFUL_ROUNDS, MIN_WALL_TIME_LIMIT, BASE_WALL_TIME_PER_CYCLE, BASE_FIXED_OVERHEAD_TIME, DEFAULT_ESTIMATED_WALL_TIME
+        global ENABLE_DETAILED_DEBUG, LOG_DIR, TMP_DIR, CLEANUP_SUCCESSFUL_ROUNDS, MIN_WALL_TIME_LIMIT 
+        global BASE_WALL_TIME_PER_CYCLE, BASE_FIXED_OVERHEAD_TIME, DEFAULT_ESTIMATED_WALL_TIME, DEFAULT_CYCLE_CPU_TIMEOUT_FROM_CONFIG
         start_time_main = time.monotonic()
         try:
             config_path = 'config.yml'
@@ -533,11 +552,14 @@ class JarTester:
             parallel_rounds_config = test_config.get('parallel', DEFAULT_PARALLEL_ROUNDS)
             ENABLE_DETAILED_DEBUG = bool(test_config.get('debug', ENABLE_DETAILED_DEBUG))
             CLEANUP_SUCCESSFUL_ROUNDS = bool(test_config.get('cleanup', CLEANUP_SUCCESSFUL_ROUNDS))
-            # Load wall time parameters from config
+            
+            # Load wall time parameters and new cycle_cpu_timeout from config
             MIN_WALL_TIME_LIMIT = float(test_config.get('min_wall_time_limit', MIN_WALL_TIME_LIMIT))
-            BASE_WALL_TIME_PER_CYCLE = float(test_config.get('base_wall_time_per_cycle', BASE_WALL_TIME_PER_CYCLE))
+            BASE_WALL_TIME_PER_CYCLE = float(test_config.get('base_wall_time_per_cycle', BASE_WALL_TIME_PER_CYCLE)) # Still used if new formula fails
             BASE_FIXED_OVERHEAD_TIME = float(test_config.get('base_fixed_overhead_time', BASE_FIXED_OVERHEAD_TIME))
             DEFAULT_ESTIMATED_WALL_TIME = float(test_config.get('default_estimated_wall_time', DEFAULT_ESTIMATED_WALL_TIME))
+            JarTester._cycle_cpu_timeout_from_config = float(test_config.get('cycle_cpu_timeout', DEFAULT_CYCLE_CPU_TIMEOUT_FROM_CONFIG))
+
 
             if hw_n is None or not jar_base_dir: print("ERROR: 'hw' or 'jar_base_dir' missing.", file=sys.stderr); return
             m = hw_n // 4 + 1; hw_n_str = os.path.join(f"unit_{m}", f"hw_{hw_n}")
@@ -553,14 +575,16 @@ class JarTester:
             os.makedirs(LOG_DIR, exist_ok=True); os.makedirs(TMP_DIR, exist_ok=True)
             JarTester._log_file_path = os.path.abspath(os.path.join(LOG_DIR, f"{time.strftime('%Y%m%d-%H%M%S')}_driver_run.log"))
             print(f"INFO: Target: {hw_n_str}, Logs: {JarTester._log_file_path}")
-            print(f"INFO: Wall Time Params: Min={MIN_WALL_TIME_LIMIT:.1f}s, PerCycle={BASE_WALL_TIME_PER_CYCLE:.1f}s, Overhead={BASE_FIXED_OVERHEAD_TIME:.1f}s, DefaultEst={DEFAULT_ESTIMATED_WALL_TIME:.1f}s")
+            print(f"INFO: Wall Time Params: Min={MIN_WALL_TIME_LIMIT:.1f}s, FixedOverhead={BASE_FIXED_OVERHEAD_TIME:.1f}s, DefaultEst={DEFAULT_ESTIMATED_WALL_TIME:.1f}s")
+            print(f"INFO: Driver Params: Configured Cycle Timeout for Driver (passed as --cycle_timeout): {JarTester._cycle_cpu_timeout_from_config:.1f}s")
+
 
             if not os.path.exists(JarTester._driver_script_path): print(f"ERROR: Driver script not found: {JarTester._driver_script_path}", file=sys.stderr); return
             if not JarTester._find_jar_files(): print("ERROR: No JARs found.", file=sys.stderr); return
             if not JarTester._initialize_presets(): print("ERROR: Failed to init presets.", file=sys.stderr); return
             signal.signal(signal.SIGINT, JarTester._signal_handler)
             if not ENABLE_DETAILED_DEBUG: input("Setup complete. Press Enter to begin testing...")
-            # (Main parallel round execution loop - unchanged from previous driver integration)
+            
             active_futures = set()
             with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_rounds_config, thread_name_prefix='RoundRunner') as executor:
                 while not JarTester._interrupted:
@@ -574,21 +598,21 @@ class JarTester:
                             pkg = future.result()
                             if pkg: JarTester._display_and_log_results(pkg["round_num"], pkg["results"], pkg["preset_cmd"], pkg["wall_limit"])
                             if pkg and not JarTester._interrupted: JarTester._update_history(pkg["results"])
-                        except Exception as exc: print(f"ERROR processing round future: {exc}")
+                        except Exception as exc: print(f"ERROR processing round future: {exc}\n{traceback.format_exc()}")
                 if JarTester._interrupted and active_futures:
-                    print("\nInterrupt: Waiting for active rounds..."); (done_after, _) = concurrent.futures.wait(active_futures, return_when=concurrent.futures.ALL_COMPLETED)
+                    print("\nInterrupt: Waiting for active rounds..."); (done_after, _) = concurrent.futures.wait(active_futures, timeout=10.0, return_when=concurrent.futures.ALL_COMPLETED)
                     for future in done_after:
                         try:
                             pkg = future.result()
                             if pkg: JarTester._display_and_log_results(pkg["round_num"],pkg["results"],pkg["preset_cmd"],pkg["wall_limit"])
-                        except Exception: pass
-        except Exception as e: print(f"\nFATAL ERROR in main: {e}", file=sys.stderr); JarTester._interrupted = True
+                        except Exception: pass # Already handled or interrupting
+        except Exception as e: print(f"\nFATAL ERROR in main: {e}\n{traceback.format_exc()}", file=sys.stderr); JarTester._interrupted = True
         finally:
-            summary = JarTester._print_summary() # (Summary and cleanup info unchanged)
+            summary = JarTester._print_summary() 
             print(summary)
             if JarTester._log_file_path:
                 try:
-                     with JarTester._log_lock: open(JarTester._log_file_path, "a").write("\n\n" + "="*20 + " FINAL SUMMARY " + "="*20 + "\n" + summary + "\n")
+                     with JarTester._log_lock: open(JarTester._log_file_path, "a", encoding="utf-8").write("\n\n" + "="*20 + " FINAL SUMMARY " + "="*20 + "\n" + summary + "\n")
                 except Exception: pass
             end_time_main = time.monotonic()
             print(f"\nTotal execution time: {end_time_main - start_time_main:.2f} seconds.")
@@ -597,12 +621,16 @@ class JarTester:
 #     # Example config.yml:
 #     # hw: 13
 #     # jar_base_dir: "path/to/jars_hw13"
+#     # logs_dir: "my_logs"
+#     # tmp_dir: "my_tmp"
 #     # test:
 #     #   parallel: 4
 #     #   debug: false
 #     #   cleanup: true
-#     #   min_wall_time_limit: 10.0 # Floor for wall time
-#     #   base_wall_time_per_cycle: 2.5 # Time per --max_cycles
-#     #   base_fixed_overhead_time: 5.0 # Fixed driver overhead
-#     #   default_estimated_wall_time: 60.0 # If --max_cycles not in preset
+#     #   min_wall_time_limit: 10.0        # Floor for tester's wall time limit for driver.py
+#     #   base_fixed_overhead_time: 5.0    # Fixed overhead for driver (startup, SUT init, etc.)
+#     #   default_estimated_wall_time: 60.0 # Fallback wall time if --max_cycles not in preset for calculation
+#     #   cycle_cpu_timeout: 2.5           # Value for driver.py's --cycle_timeout arg (SUT output collection per cycle)
+#     #                                    # Also used in tester's wall time formula: cycle_cpu_timeout * 1.1 * max_cycles + base_fixed_overhead_time
+#     #   # base_wall_time_per_cycle: 2.5 # Kept for compatibility if cycle_cpu_timeout based formula parts are missing.
 #     JarTester.test()
