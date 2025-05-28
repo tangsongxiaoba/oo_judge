@@ -66,8 +66,9 @@ def enqueue_output(out, q):
         for line in iter(out.readline, b''):
             q.put(line.decode('utf-8').strip())
     except ValueError:
-        pass
+        pass # Handle potential decoding errors if SUT output is not UTF-8
     except Exception:
+        # Generic exception handling for other readline issues
         pass
     finally:
         if hasattr(out, 'close') and not out.closed:
@@ -107,7 +108,7 @@ def _collect_sut_output_smart(
             try:
                 first_line = sut_stdout_q.get(timeout=poll_interval)
                 collected_lines.append(first_line)
-                if log_fh: log_fh.write(first_line + '\n')
+                if log_fh: log_fh.write(first_line + '\n'); log_fh.flush()
                 if verbose: print(f"SUT -> DRIVER (Tidy Count Line): {first_line}")
                 lines_collected_this_block += 1
                 break
@@ -134,7 +135,7 @@ def _collect_sut_output_smart(
             try:
                 query_header_line = sut_stdout_q.get(timeout=poll_interval)
                 collected_lines.append(query_header_line)
-                if log_fh: log_fh.write(query_header_line + '\n')
+                if log_fh: log_fh.write(query_header_line + '\n'); log_fh.flush()
                 if verbose: print(f"SUT -> DRIVER (Query Header): {query_header_line}")
                 lines_collected_this_block += 1
                 break
@@ -152,7 +153,7 @@ def _collect_sut_output_smart(
                 if verbose: print(f"DRIVER: Invalid Query trace count: {num_trace_lines}.")
                 return collected_lines, False
             expected_lines_to_collect_current_block = 1 + num_trace_lines
-        except (ValueError, TypeError):
+        except (ValueError, TypeError): # Added TypeError for robustness
              if verbose: print(f"DRIVER: Error parsing trace count from query header: '{query_header_line}'.")
              return collected_lines, False
 
@@ -172,7 +173,7 @@ def _collect_sut_output_smart(
             try:
                 line = sut_stdout_q.get(timeout=poll_interval)
                 collected_lines.append(line)
-                if log_fh: log_fh.write(line + '\n')
+                if log_fh: log_fh.write(line + '\n'); log_fh.flush()
                 if verbose: print(f"SUT -> DRIVER (Line {lines_collected_this_block + 1}): {line}")
                 lines_collected_this_block += 1
                 break
@@ -229,8 +230,8 @@ def run_driver(
     process: Optional[subprocess.Popen] = None
     stdout_thread: Optional[threading.Thread] = None
     stderr_thread: Optional[threading.Thread] = None
-    stdout_q: Optional[queue.Queue[str]] = None # Corrected type hint
-    stderr_q: Optional[queue.Queue[str]] = None # Corrected type hint
+    stdout_q: Optional[queue.Queue[str]] = None
+    stderr_q: Optional[queue.Queue[str]] = None
 
     _stdin_log_fh = None
     _stdout_log_fh = None
@@ -275,25 +276,28 @@ def run_driver(
                 if isbn in isbn_set:
                     attempts +=1; continue
                 isbn_set.add(isbn)
-                num_copies = random.randint(initial_min_copies, initial_max_copies)
+                num_copies = random.randint(max(1,initial_min_copies), max(1,initial_max_copies)) # Ensure at least 1 copy
                 initial_book_commands_str_list.append(f"{isbn} {num_copies}")
                 generated_types_count += 1; attempts +=1
 
             if generated_types_count < actual_initial_book_types_count:
                 initial_book_commands_str_list[0] = str(generated_types_count)
-            if generated_types_count == 0 :
+            if generated_types_count == 0 and actual_initial_book_types_count > 0 : # Check if requested > 0
                 final_error_message = f"Error: Failed to generate any initial books (requested {actual_initial_book_types_count})."
                 overall_success = False
 
         if overall_success and generated_types_count > 0 :
             python_library_model.initialize_books(initial_book_commands_str_list[1:])
+        elif overall_success and actual_initial_book_types_count == 0:
+             if verbose: print("No initial books requested or generated.")
+             # No books, but not an error state for the driver itself. SUT might have issues.
 
         if overall_success:
             if verbose: print(f"\n--- Starting Java Process: {jar_path} ---")
             try:
                 process = subprocess.Popen(['java', '-jar', jar_path],
                                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                           universal_newlines=False)
+                                           universal_newlines=False) # Keep as False for binary streams
             except FileNotFoundError:
                 final_error_message = f"Error: JAR file not found at '{jar_path}'."; overall_success = False
             except Exception as e:
@@ -312,15 +316,17 @@ def run_driver(
                     if process.stdin and not process.stdin.closed:
                         line_with_nl = line + '\n'
                         process.stdin.write(line_with_nl.encode('utf-8'))
-                        if _stdin_log_fh: _stdin_log_fh.write(line_with_nl)
+                        if _stdin_log_fh: _stdin_log_fh.write(line_with_nl); _stdin_log_fh.flush()
                         process.stdin.flush()
                     else:
                         final_error_message = "Error: SUT stdin closed unexpectedly during initial data send."; overall_success = False; break
                 except (IOError, BrokenPipeError) as e:
                     final_error_message = f"Error writing initial data to JAR stdin: {e}. SUT likely crashed."; overall_success = False; break
+                if not overall_success: break
+
 
         current_sim_date = date(start_year, start_month, start_day)
-        is_sim_library_closed = True
+        # is_sim_library_closed is set at the start of each OPEN-CLOSE cycle loop
         total_commands_processed_in_driver = 0
         completed_open_close_cycles = 0
 
@@ -334,32 +340,33 @@ def run_driver(
 
                 current_dynamic_close_prob = initial_close_probability
                 days_in_current_open_period_for_prob_increase = 0
-
-                # Ensure library is treated as closed before starting a new OPEN-CLOSE cycle for gen.py
-                # This `is_sim_library_closed` is the state *before* calling gen.generate_command_cycle
-                # for the first batch of this OPEN-CLOSE cycle.
-                is_sim_library_closed = True
+                is_sim_library_closed = True # Crucial: Reset for each new OPEN-CLOSE cycle
 
                 # Inner loop: represents one OPEN period (multiple days/batches until a CLOSE)
-                while True: # Loop until this OPEN-CLOSE cycle is completed by a CLOSE
+                while True:
                     if total_commands_processed_in_driver >= max_total_commands:
-                        if verbose: print("Max total commands reached. Breaking OPEN period."); break
+                        if verbose: print("  Max total commands reached. Breaking OPEN period.");
+                        # If max commands reached, consider the library closed for this cycle to break outer loop if needed
+                        is_sim_library_closed = True # Ensure cycle completion logic triggers if this is why we break
+                        break
                     if not overall_success: break
 
                     days_in_current_open_period_for_prob_increase +=1
                     if verbose:
                         print(f"  --- Batch {days_in_current_open_period_for_prob_increase} of current OPEN period (Driver Date: {current_sim_date}, LibClosedForGen: {is_sim_library_closed}) ---")
                         print(f"  Current dynamic_close_prob for gen: {current_dynamic_close_prob:.2f}")
+                        print(f"  DRIVER: About to call gen.py. current_sim_date={current_sim_date}, is_sim_library_closed={is_sim_library_closed}")
+
 
                     num_requests_this_batch = random.randint(min_requests_per_day, max_requests_per_day)
-                    if is_sim_library_closed and num_requests_this_batch == 0: # Ensure action if opening
-                        num_requests_this_batch = 1
+                    if is_sim_library_closed and num_requests_this_batch == 0:
+                        num_requests_this_batch = 1 # Ensure some action if opening
 
-                    commands_for_batch, next_date_from_gen, closed_after_batch = \
+                    commands_for_batch, next_date_from_gen, closed_after_batch_from_gen = \
                         generate_command_cycle(
                             python_library_model, current_sim_date, is_sim_library_closed,
                             num_requests_this_batch,
-                            current_dynamic_close_prob, # Use the dynamic probability
+                            current_dynamic_close_prob,
                             min_skip_days_post_close, max_skip_days_post_close,
                             borrow_weight, order_weight, query_weight, pick_weight,
                             failed_order_weight, read_weight, restore_weight,
@@ -368,94 +375,107 @@ def run_driver(
                             b_book_priority, c_book_priority, a_book_read_priority
                         )
 
-                    if not commands_for_batch:
-                        if verbose: print("  Generator produced no commands for this batch. Assuming CLOSE for this OPEN-CLOSE cycle.");
-                        is_sim_library_closed = True # Effectively ends the OPEN period
-                        break # Break inner loop, will increment completed_open_close_cycles
-
-                    if verbose: print(f"  Generator produced {len(commands_for_batch)} commands for this batch.")
+                    if verbose:
+                        print(f"  DRIVER: gen.py returned. Commands: {len(commands_for_batch)}, closed_after_batch={closed_after_batch_from_gen}, next_date_from_gen={next_date_from_gen}")
 
                     sut_output_for_this_batch: List[str] = []
                     actual_commands_sent_this_batch: List[str] = []
 
-                    for cmd_idx, cmd_str in enumerate(commands_for_batch):
-                        if total_commands_processed_in_driver >= max_total_commands:
-                            if verbose: print("  Max total commands reached. Stopping mid-batch."); break
+                    if commands_for_batch: # Only process if gen.py produced commands
+                        for cmd_idx, cmd_str in enumerate(commands_for_batch):
+                            if total_commands_processed_in_driver >= max_total_commands:
+                                if verbose: print("  Max total commands reached. Stopping mid-batch."); break
 
-                        if verbose: print(f"  DRIVER -> SUT (Cmd {cmd_idx+1}/{len(commands_for_batch)}): {cmd_str}")
-                        try:
-                            if process.stdin and not process.stdin.closed:
-                                process.stdin.write((cmd_str + '\n').encode('utf-8'))
-                                if _stdin_log_fh: _stdin_log_fh.write(cmd_str + '\n')
-                                process.stdin.flush()
-                                actual_commands_sent_this_batch.append(cmd_str)
-                                total_commands_processed_in_driver += 1
+                            if verbose: print(f"  DRIVER -> SUT (Cmd {cmd_idx+1}/{len(commands_for_batch)}): {cmd_str}")
+                            try:
+                                if process.stdin and not process.stdin.closed:
+                                    process.stdin.write((cmd_str + '\n').encode('utf-8'))
+                                    if _stdin_log_fh: _stdin_log_fh.write(cmd_str + '\n'); _stdin_log_fh.flush()
+                                    process.stdin.flush()
+                                    actual_commands_sent_this_batch.append(cmd_str)
+                                    total_commands_processed_in_driver += 1
+                                else:
+                                    final_error_message = f"Error: SUT stdin closed before sending cmd '{cmd_str}'."; overall_success = False; break
+                            except (IOError, BrokenPipeError) as e:
+                                final_error_message = f"Error writing cmd '{cmd_str}' to SUT: {e}."; overall_success = False; break
+                            if not overall_success: break
+
+                            cmd_parts = cmd_str.split()
+                            action_type_or_student = cmd_parts[1]
+                            op_context: OutputCollectionContext
+                            if action_type_or_student == "OPEN" or action_type_or_student == "CLOSE":
+                                op_context = OutputCollectionContext.TIDY_OPERATION_OPEN_OR_CLOSE
+                            elif len(cmd_parts) > 2 and cmd_parts[2] == "queried":
+                                op_context = OutputCollectionContext.USER_OPERATION_QUERY
                             else:
-                                final_error_message = f"Error: SUT stdin closed before sending cmd '{cmd_str}'."; overall_success = False; break
-                        except (IOError, BrokenPipeError) as e:
-                            final_error_message = f"Error writing cmd '{cmd_str}' to SUT: {e}."; overall_success = False; break
-                        if not overall_success: break
+                                op_context = OutputCollectionContext.USER_OPERATION_SINGLE_LINE
 
-                        cmd_parts = cmd_str.split()
-                        # cmd_parts[0] is "[YYYY-MM-DD]", cmd_parts[1] is operation or student_id
-                        action_type_or_student = cmd_parts[1]
-                        op_context: OutputCollectionContext
-                        if action_type_or_student == "OPEN" or action_type_or_student == "CLOSE":
-                            op_context = OutputCollectionContext.TIDY_OPERATION_OPEN_OR_CLOSE
-                        elif len(cmd_parts) > 2 and cmd_parts[2] == "queried": # Student command: [date] student_id queried book_id
-                            op_context = OutputCollectionContext.USER_OPERATION_QUERY
-                        else: # Other student commands or potentially malformed
-                            op_context = OutputCollectionContext.USER_OPERATION_SINGLE_LINE
+                            collected_op_output, success_flag = _collect_sut_output_smart(
+                                stdout_q, process, op_context,
+                                SUT_OUTPUT_COLLECTION_POLL_INTERVAL, max_wait_per_line_sut_output, verbose, _stdout_log_fh
+                            )
+                            sut_output_for_this_batch.extend(collected_op_output)
+                            if not success_flag:
+                                final_error_message = f"SUT failed to provide expected output for command: {cmd_str}"
+                                if process.poll() is not None: final_error_message += " SUT process terminated."
+                                overall_success = False; break
+                        # End of loop for commands within one batch
 
-                        collected_op_output, success_flag = _collect_sut_output_smart(
-                            stdout_q, process, op_context, # Use op_context here
-                            SUT_OUTPUT_COLLECTION_POLL_INTERVAL, max_wait_per_line_sut_output, verbose, _stdout_log_fh
-                        )
-                        sut_output_for_this_batch.extend(collected_op_output)
-                        if not success_flag:
-                            final_error_message = f"SUT failed to provide expected output for command: {cmd_str}"
-                            if process.poll() is not None: final_error_message += " SUT process terminated."
-                            overall_success = False; break
-                    # End of loop for commands within one batch from gen.py
-                    if not overall_success: break # Break inner 'while True' for OPEN period
+                        if not overall_success: # Error during command sending/collection
+                            current_sim_date = next_date_from_gen # Still update date based on gen
+                            is_sim_library_closed = closed_after_batch_from_gen # And closed status
+                            break # Break inner 'while True' for OPEN period
 
-                    if actual_commands_sent_this_batch:
-                        if verbose:
-                            print(f"  DRIVER: Validating batch (Driver Date Ref: {current_sim_date}) with {len(actual_commands_sent_this_batch)} driver commands and {len(sut_output_for_this_batch)} SUT output lines.")
-
-                        batch_check_result = check_cycle(
-                            actual_commands_sent_this_batch, sut_output_for_this_batch, python_library_model
-                        )
-                        if not batch_check_result["is_legal"]:
-                            final_error_message = f"Batch Validation FAILED (Driver Date Ref: {current_sim_date}): {batch_check_result['error_message']}"
-                            if batch_check_result.get("first_failing_command"):
-                                final_error_message += f" | Context: {batch_check_result['first_failing_command']}"
-                            overall_success = False; break
-                        else:
-                            if verbose: print(f"  Batch (Driver Date Ref: {current_sim_date}) OK.")
+                        if actual_commands_sent_this_batch: # If some commands were actually sent from this non-empty batch
+                            if verbose:
+                                print(f"  DRIVER: Validating batch (Driver Date Ref: {current_sim_date}) with {len(actual_commands_sent_this_batch)} driver commands and {len(sut_output_for_this_batch)} SUT output lines.")
+                            batch_check_result = check_cycle(
+                                actual_commands_sent_this_batch, sut_output_for_this_batch, python_library_model
+                            )
+                            if not batch_check_result["is_legal"]:
+                                final_error_message = f"Batch Validation FAILED (Driver Date Ref: {current_sim_date}): {batch_check_result['error_message']}"
+                                if batch_check_result.get("first_failing_command"):
+                                    final_error_message += f" | Context: {batch_check_result['first_failing_command']}"
+                                overall_success = False
+                                # Update state before breaking outer loops if validation fails
+                                current_sim_date = next_date_from_gen
+                                is_sim_library_closed = closed_after_batch_from_gen
+                                break # Break inner 'while True'
+                            else:
+                                if verbose: print(f"  Batch (Driver Date Ref: {current_sim_date}) OK.")
+                        # else: commands_for_batch was non-empty, but actual_commands_sent_this_batch was empty (e.g. max_total_commands hit before first cmd)
+                    
+                    # else (commands_for_batch was empty from gen.py):
                     elif verbose:
-                        print(f"  DRIVER: No commands were sent/validated in this batch (Driver Date Ref: {current_sim_date}).")
-                    if not overall_success: break # Break inner 'while True' for OPEN period
+                         print(f"  DRIVER: Generator produced no commands for this batch (Driver Date Ref: {current_sim_date}). Will use gen's returned date/closed status.")
 
-                    # Update driver's state for the next call to gen.py or next OPEN-CLOSE cycle
+
+                    if not overall_success: break # Break inner 'while True' if any error occurred (validation or send error)
+
+                    # ALWAYS update driver's state based on what gen.py returned for this batch
                     current_sim_date = next_date_from_gen
-                    is_sim_library_closed = closed_after_batch # This is CRUCIAL
+                    is_sim_library_closed = closed_after_batch_from_gen
 
-                    if is_sim_library_closed: # This batch ended with a CLOSE
-                        if verbose: print(f"  Library CLOSED by generator for date {current_sim_date}. Ending current OPEN period.")
+                    if is_sim_library_closed:
+                        if verbose: print(f"  Library status after batch: CLOSED (as per gen.py). Next sim date for driver: {current_sim_date}. Ending current OPEN period.")
                         break # Exit inner 'while True' loop, completing the OPEN-CLOSE cycle
-                    else: # Library still OPEN, increase close_probability for the next batch in this OPEN period
+                    else: # Library still OPEN
+                        if verbose: print(f"  Library status after batch: OPEN (as per gen.py). Next sim date for driver: {current_sim_date}. Continuing OPEN period.")
                         current_dynamic_close_prob = min(max_close_probability, current_dynamic_close_prob + close_probability_increment)
+                        if not commands_for_batch: # Gen returned empty, but said still open
+                             if verbose: print("  Warning: Gen.py returned no commands but indicated library remains open. Relying on future close_probability or max_total_commands.")
                 # End of inner 'while True' loop (one OPEN period finishes)
 
-                if not overall_success: break # Break outer 'completed_open_close_cycles' loop
+                if not overall_success: break
 
-                if is_sim_library_closed: # Successfully completed an OPEN -> ... -> CLOSE sequence
+                if is_sim_library_closed: # Successfully completed an OPEN -> ... -> CLOSE sequence OR max commands reached
                     completed_open_close_cycles += 1
-                    if verbose: print(f"--- Completed OPEN-CLOSE Cycle {completed_open_close_cycles}/{max_cycles} ---")
-                else: # Inner loop exited for other reasons (e.g. max_total_commands) before a CLOSE
-                    if verbose: print("Warning: Inner OPEN period loop exited without the library being closed. Test run may end prematurely.")
-                    break # Terminate outer loop as well, as an OPEN-CLOSE cycle wasn't completed.
+                    if verbose: print(f"--- Completed OPEN-CLOSE Cycle {completed_open_close_cycles}/{max_cycles} (or max commands reached) ---")
+                else: # Inner loop exited for other reasons (e.g. error, SUT crash) before a CLOSE was determined by gen
+                    if verbose: print("Warning: Inner OPEN period loop exited without library being definitively closed by generator. Test run may end prematurely or with unexpected state.")
+                    # This typically means overall_success is False, so the outer loop will break.
+                    # If overall_success is somehow True here, it's an anomaly.
+                    break 
             # End of outer 'completed_open_close_cycles' loop
 
         if verbose: print("\n--- Interaction Loop Finished ---")
@@ -463,34 +483,35 @@ def run_driver(
         sut_exit_code = -1
         if process:
             sut_exit_code = process.poll()
-            if sut_exit_code is None:
+            if sut_exit_code is None: # SUT still running
                 if verbose: print("Terminating SUT process...")
                 try:
                     if process.stdin and not process.stdin.closed: process.stdin.close()
-                except Exception: pass
+                except Exception: pass # Ignore errors on close
                 process.terminate()
                 try:
-                    sut_exit_code = process.wait(timeout=1.5)
+                    sut_exit_code = process.wait(timeout=1.5) # Give SUT time to terminate
                 except subprocess.TimeoutExpired:
                     if verbose: print("SUT did not terminate gracefully, killing."); process.kill()
                     try: sut_exit_code = process.wait(timeout=0.5)
-                    except subprocess.TimeoutExpired: sut_exit_code = -99
-                except Exception: sut_exit_code = -98
+                    except subprocess.TimeoutExpired: sut_exit_code = -99 # Killed, but wait timed out
+                except Exception: sut_exit_code = -98 # Error during terminate/wait
 
-        if verbose and stdout_q and stderr_q : # Check if queues were initialized
-            def drain_queue(q_to_drain, q_name: str):
+        if verbose and stdout_q and stderr_q :
+            def drain_queue(q_to_drain, q_name: str, log_file_handle):
                 if q_to_drain is None: return
                 drained_count = 0
                 while not q_to_drain.empty():
                     try:
                         item = q_to_drain.get_nowait()
-                        if verbose and drained_count < 5:
+                        if verbose and drained_count < 10: # Limit console output
                              print(f"DRIVER: Draining SUT {q_name} (lingering): {item}")
+                        if log_file_handle: log_file_handle.write(f"LINGERING {q_name}: {item}\n"); log_file_handle.flush()
                         drained_count+=1
                     except queue.Empty: break
                 if drained_count > 0 and verbose: print(f"DRIVER: Drained {drained_count} items from SUT {q_name} queue.")
-            drain_queue(stdout_q, "STDOUT")
-            drain_queue(stderr_q, "STDERR")
+            drain_queue(stdout_q, "STDOUT", _stdout_log_fh) # Log to file if available
+            drain_queue(stderr_q, "STDERR", _stdout_log_fh) # Log stderr to stdout_log too, or a separate one
 
         if stdout_thread and stdout_thread.is_alive(): stdout_thread.join(timeout=0.5)
         if stderr_thread and stderr_thread.is_alive(): stderr_thread.join(timeout=0.5)
@@ -508,26 +529,23 @@ def run_driver(
         else: print(f"\n--- Driver finished: Errors encountered. Last error: {final_error_message} ---")
 
     if not overall_success and not final_error_message:
-         final_error_message = "An unspecified error occurred."
+         final_error_message = "An unspecified error occurred during the driver run."
 
     return overall_success, final_error_message
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Run interactive test driver for LibrarySystem (hw14 compliant, uses gen.py for command cycles, dynamic close_prob).")
+    parser = argparse.ArgumentParser(description="Run interactive test driver for LibrarySystem.")
     parser.add_argument("jar_path", help="Path to the student's JAR file.")
-    parser.add_argument("--max_cycles", type=int, default=DEFAULT_MAX_CYCLES, help="Max number of full OPEN-CLOSE cycles.")
-    parser.add_argument("--max_total_commands", type=int, default=DEFAULT_MAX_TOTAL_COMMANDS, help="Max total commands sent to SUT.")
-
+    parser.add_argument("--max_cycles", type=int, default=DEFAULT_MAX_CYCLES)
+    parser.add_argument("--max_total_commands", type=int, default=DEFAULT_MAX_TOTAL_COMMANDS)
     parser.add_argument("--min_skip_post_close", type=int, dest="min_skip_days_post_close", default=DEFAULT_MIN_SKIP_DAYS_POST_CLOSE_FOR_GEN)
     parser.add_argument("--max_skip_post_close", type=int, dest="max_skip_days_post_close", default=DEFAULT_MAX_SKIP_DAYS_POST_CLOSE_FOR_GEN)
     parser.add_argument("--min_req_per_day", type=int, dest="min_requests_per_day", default=DEFAULT_MIN_REQUESTS_PER_DAY_FOR_GEN)
     parser.add_argument("--max_req_per_day", type=int, dest="max_requests_per_day", default=DEFAULT_MAX_REQUESTS_PER_DAY_FOR_GEN)
-
-    parser.add_argument("--init_close_prob", type=float, dest="initial_close_probability", default=DEFAULT_INITIAL_CLOSE_PROBABILITY, help="Initial close probability after an OPEN.")
-    parser.add_argument("--close_prob_inc", type=float, dest="close_probability_increment", default=DEFAULT_CLOSE_PROBABILITY_INCREMENT, help="Increment for close probability per batch in an OPEN period.")
-    parser.add_argument("--max_close_prob", type=float, dest="max_close_probability", default=DEFAULT_MAX_CLOSE_PROBABILITY, help="Maximum close probability.")
-
+    parser.add_argument("--init_close_prob", type=float, dest="initial_close_probability", default=DEFAULT_INITIAL_CLOSE_PROBABILITY)
+    parser.add_argument("--close_prob_inc", type=float, dest="close_probability_increment", default=DEFAULT_CLOSE_PROBABILITY_INCREMENT)
+    parser.add_argument("--max_close_prob", type=float, dest="max_close_probability", default=DEFAULT_MAX_CLOSE_PROBABILITY)
     parser.add_argument("--b_w", type=int, dest="borrow_weight", default=DEFAULT_BORROW_WEIGHT)
     parser.add_argument("--o_w", type=int, dest="order_weight", default=DEFAULT_ORDER_WEIGHT)
     parser.add_argument("--q_w", type=int, dest="query_weight", default=DEFAULT_QUERY_WEIGHT)
@@ -545,12 +563,14 @@ if __name__ == '__main__':
     parser.add_argument("--init_types", type=int, dest="initial_book_types_count", default=INITIAL_BOOK_TYPES_COUNT)
     parser.add_argument("--init_min_cp", type=int, dest="initial_min_copies", default=INITIAL_BOOKS_MIN_COPIES)
     parser.add_argument("--init_max_cp", type=int, dest="initial_max_copies", default=INITIAL_BOOKS_MAX_COPIES)
-    parser.add_argument("--start_year", type=int, default=2025); parser.add_argument("--start_month", type=int, default=1); parser.add_argument("--start_day", type=int, default=1)
-    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility.")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output.")
+    parser.add_argument("--start_year", type=int, default=2025)
+    parser.add_argument("--start_month", type=int, default=1)
+    parser.add_argument("--start_day", type=int, default=1)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("-i", "--input_log_file", dest="input_log_file_path_arg", type=str, default=None)
     parser.add_argument("-o", "--output_log_file", dest="output_log_file_path_arg", type=str, default=None)
-    parser.add_argument("--cycle_timeout", dest="max_wait_per_line_sut_output", type=float, default=DEFAULT_MAX_WAIT_PER_LINE_SUT_OUTPUT, help="Max wait time (sec) for each line of SUT output.")
+    parser.add_argument("--cycle_timeout", dest="max_wait_per_line_sut_output", type=float, default=DEFAULT_MAX_WAIT_PER_LINE_SUT_OUTPUT)
 
     args = parser.parse_args()
 
@@ -585,9 +605,16 @@ if __name__ == '__main__':
         else:
             result_json["status"] = "failure"
             result_json["reason"] = error_msg_details if error_msg_details else "Unknown error."
-        print(json.dumps(result_json))
+        # Ensure output is flushed if not verbose, especially for CI/automated systems
+        try:
+            print(json.dumps(result_json))
+            sys.stdout.flush()
+        except Exception: # Fallback if stdout is problematic
+            pass
         sys.exit(0 if run_successful else 1)
     else:
-        if not run_successful and error_msg_details:
+        # Verbose output already happened. Exit status is enough.
+        # Ensure final error message is printed if not already part of verbose flow.
+        if not run_successful and error_msg_details and "--- Driver finished: Errors encountered." not in error_msg_details : # Avoid double printing if already in final_error_message
             print(f"Driver run final error: {error_msg_details}")
         sys.exit(0 if run_successful else 1)
