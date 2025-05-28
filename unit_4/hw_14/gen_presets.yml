@@ -1,0 +1,191 @@
+# gen_presets.yml for Library System (driver.py - hw14 compliant)
+
+# --- Existing Scenarios (Enhanced with new parameters where applicable) ---
+# Scenarios 1-33 as provided in the prompt, assumed to be already updated
+# by the user to include new parameter names with baseline values.
+# Example (structure is important):
+# - "--init_types 3 --init_min_cp 1 --init_max_cp 2 --max_cycles 5 --max_total_commands 30 --min_req_per_day 1 --max_req_per_day 3 --b_w 1 --o_w 1 --q_w 1 --p_w 2 --fo_w 1 --read_w 1 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+# ... (The following scenarios are processed based on the input provided) ...
+
+# Scenario 1: Small Library, Low Activity, Quick Sanity Check
+# Goal: Basic functionality check including new read/restore at low volume.
+# New params: Added read_w, a_read_prio, restore_prop with moderate values.
+- "--init_types 3 --init_min_cp 1 --init_max_cp 2 --max_cycles 5 --max_total_commands 30 --min_req_per_day 1 --max_req_per_day 3 --b_w 1 --o_w 1 --q_w 1 --p_w 2 --fo_w 1 --read_w 1 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 2: Medium Library, Moderate Activity, Focus on Borrows & Becoming Hot
+# Goal: Test borrow/return mechanics and see books become hot.
+# New params: Balanced read weight.
+- "--init_types 10 --init_min_cp 2 --init_max_cp 5 --max_cycles 15 --max_total_commands 120 --min_req_per_day 2 --max_req_per_day 5 --b_w 5 --o_w 2 --q_w 2 --p_w 2 --fo_w 1 --read_w 2 --restore_w 1 --new_s_ratio 0.2 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.8 --pick_prop 0.6 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 3: Many Initial C-Type Books, High Order/Pick Activity, C-Book Focus
+# Goal: Stress test the reservation system for C-books. Reading is secondary.
+- "--init_types 15 --init_min_cp 1 --init_max_cp 3 --max_cycles 20 --max_total_commands 180 --min_req_per_day 3 --max_req_per_day 6 --b_w 1 --o_w 5 --q_w 1 --p_w 2 --fo_w 2 --read_w 1 --restore_w 1 --new_s_ratio 0.15 --b_prio 0.2 --c_prio 0.8 --a_read_prio 0.2 --ret_prop 0.6 --pick_prop 0.9 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 4: Long Run, High Query Load, Many Students (Months Span)
+# Goal: Test query performance and handling of many student records over time, including trace for read books.
+- "--init_types 8 --init_min_cp 3 --init_max_cp 8 --max_cycles 90 --max_total_commands 450 --min_req_per_day 5 --max_req_per_day 10 --b_w 2 --o_w 2 --q_w 6 --p_w 2 --fo_w 1 --read_w 2 --restore_w 1 --new_s_ratio 0.3 --min_skip_post_close 0 --max_skip_post_close 1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 5: Stress Test Failed Orders and Edge Cases (including failed reads)
+# Goal: Generate many situations where orders/reads should fail.
+- "--init_types 5 --init_min_cp 1 --init_max_cp 2 --max_cycles 10 --max_total_commands 90 --min_req_per_day 2 --max_req_per_day 4 --b_w 1 --o_w 1 --q_w 1 --p_w 2 --fo_w 5 --read_w 1 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 6: No New Students after Initial, Focus on Existing User Limits (Borrow, Order, Read)
+- "--init_types 7 --init_min_cp 2 --init_max_cp 4 --max_cycles 15 --max_total_commands 130 --min_req_per_day 3 --max_req_per_day 5 --b_w 3 --o_w 3 --q_w 2 --p_w 2 --fo_w 1 --read_w 2 --restore_w 1 --new_s_ratio 0.0 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 7: Minimal Initial Books, Many Order/Read Requests (Contention)
+# Goal: Force contention for few resources, including reading spots (implicitly, as books move to RR).
+- "--init_types 2 --init_min_cp 1 --init_max_cp 1 --max_cycles 20 --max_total_commands 110 --min_req_per_day 2 --max_req_per_day 5 --b_w 1 --o_w 4 --q_w 1 --p_w 2 --fo_w 1 --read_w 3 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.4 --ret_prop 0.7 --pick_prop 0.9 --restore_prop 0.7 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 8: Short Days (Few Requests), Many Days Skipped (Reservation Expiry & Hot Book Status Over Time)
+# Goal: Test reservation expiry and if hot book status persists correctly across many skipped days.
+- "--init_types 5 --init_min_cp 2 --init_max_cp 3 --max_cycles 10 --max_total_commands 60 --min_req_per_day 1 --max_req_per_day 1 --b_w 2 --o_w 2 --q_w 2 --p_w 2 --fo_w 1 --read_w 1 --restore_w 1 --new_s_ratio 0.1 --min_skip_post_close 3 --max_skip_post_close 7 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.6 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 9: Max Initial Books, Max Requests Per Day, Stress Overall Throughput (Including Read/Hot)
+- "--init_types 20 --init_min_cp 5 --init_max_cp 10 --max_cycles 25 --max_total_commands 350 --min_req_per_day 8 --max_req_per_day 15 --b_w 3 --o_w 3 --q_w 3 --p_w 2 --fo_w 1 --read_w 3 --restore_w 1 --new_s_ratio 0.25 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 10: Specific Start Date (e.g., end of year), Test Date Logic
+- "--init_types 6 --init_min_cp 2 --init_max_cp 4 --max_cycles 10 --max_total_commands 80 --start_year 2025 --start_month 12 --start_day 20 --min_req_per_day 2 --max_req_per_day 4 --b_w 2 --o_w 2 --q_w 2 --p_w 2 --fo_w 1 --read_w 1 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 11: Very few B-type books, high demand for B-type (B-Book Focus)
+- "--init_types 4 --init_min_cp 1 --init_max_cp 1 --max_cycles 15 --max_total_commands 110 --min_req_per_day 3 --max_req_per_day 5 --b_w 10 --o_w 1 --q_w 1 --p_w 2 --fo_w 1 --read_w 1 --restore_w 1 --new_s_ratio 0.4 --b_prio 0.9 --c_prio 0.1 --a_read_prio 0.2 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 12: Rapid Cycling with Minimal Skips (BRO, RR, Hot/Normal Shelf Tidying Stress)
+# Goal: Test frequent OPEN/CLOSE processing and associated tidying logic, esp. BRO/RR clearing and hot/normal shelf moves.
+- "--init_types 8 --init_min_cp 2 --init_max_cp 4 --max_cycles 20 --max_total_commands 160 --min_req_per_day 2 --max_req_per_day 4 --b_w 4 --o_w 2 --q_w 1 --p_w 2 --fo_w 1 --read_w 3 --restore_w 1 --new_s_ratio 0.1 --min_skip_post_close 0 --max_skip_post_close 0 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.9 --pick_prop 0.7 --restore_prop 0.8 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 13: Focus on Querying Non-Existent or Rarely Moved Books
+- "--init_types 10 --init_min_cp 1 --init_max_cp 2 --max_cycles 10 --max_total_commands 90 --min_req_per_day 2 --max_req_per_day 4 --b_w 1 --o_w 1 --q_w 10 --p_w 2 --fo_w 0 --read_w 1 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9" # Added min/max_req_per_day based on typical values for such a scenario
+
+# Scenario 14: Maximize commands quickly, fewer cycles (to hit max_total_commands early)
+- "--init_types 5 --init_min_cp 3 --init_max_cp 5 --max_cycles 30 --max_total_commands 60 --min_req_per_day 5 --max_req_per_day 10 --b_w 2 --o_w 2 --q_w 1 --p_w 2 --fo_w 1 --read_w 2 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 15: Long period of inactivity simulated by later start date
+- "--init_types 5 --init_min_cp 2 --init_max_cp 3 --max_cycles 15 --max_total_commands 110 --start_year 2025 --start_month 3 --start_day 1 --min_req_per_day 2 --max_req_per_day 4 --b_w 2 --o_w 2 --q_w 1 --p_w 2 --fo_w 1 --read_w 1 --restore_w 1 --new_s_ratio 0.1 --min_skip_post_close 0 --max_skip_post_close 1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 16: A-Type Book Interaction Attempts (Read OK, Borrow/Order Fail)
+- "--init_types 10 --init_min_cp 1 --init_max_cp 2 --max_cycles 10 --max_total_commands 90 --min_req_per_day 3 --max_req_per_day 5 --b_w 4 --o_w 4 --q_w 1 --p_w 2 --fo_w 2 --read_w 3 --restore_w 1 --new_s_ratio 0.2 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.7 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 17: Extreme B-Book Scarcity and Demand
+- "--init_types 2 --init_min_cp 1 --init_max_cp 1 --max_cycles 15 --max_total_commands 110 --min_req_per_day 4 --max_req_per_day 6 --b_w 8 --o_w 8 --q_w 1 --p_w 2 --fo_w 4 --read_w 1 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.95 --c_prio 0.05 --a_read_prio 0.1 --ret_prop 0.7 --pick_prop 0.8 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 18: Extreme C-Book (Same ISBN) Scarcity and Demand
+- "--init_types 2 --init_min_cp 2 --init_max_cp 2 --max_cycles 15 --max_total_commands 110 --min_req_per_day 4 --max_req_per_day 6 --b_w 1 --o_w 8 --q_w 1 --p_w 2 --fo_w 4 --read_w 1 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.05 --c_prio 0.95 --a_read_prio 0.1 --ret_prop 0.7 --pick_prop 0.8 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 19: Total Book Exhaustion Test (Borrow, Order, Read all available)
+- "--init_types 1 --init_min_cp 1 --init_max_cp 1 --max_cycles 10 --max_total_commands 60 --min_req_per_day 2 --max_req_per_day 3 --b_w 5 --o_w 5 --q_w 1 --p_w 2 --fo_w 1 --read_w 5 --restore_w 1 --new_s_ratio 0.5 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.5 --ret_prop 0.7 --pick_prop 0.9 --restore_prop 0.7 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 20: AO Pickup Deadline Stress - Just Before & Just After
+- "--init_types 5 --init_min_cp 1 --init_max_cp 2 --max_cycles 20 --max_total_commands 110 --min_req_per_day 1 --max_req_per_day 2 --b_w 1 --o_w 5 --q_w 1 --p_w 2 --fo_w 1 --read_w 1 --restore_w 1 --new_s_ratio 0.2 --min_skip_post_close 4 --max_skip_post_close 5 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.9 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 21: BRO Saturation before OPEN tidy
+- "--init_types 10 --init_min_cp 3 --init_max_cp 5 --max_cycles 15 --max_total_commands 160 --min_req_per_day 5 --max_req_per_day 8 --b_w 6 --o_w 2 --q_w 1 --p_w 2 --fo_w 1 --read_w 2 --restore_w 1 --new_s_ratio 0.1 --min_skip_post_close 0 --max_skip_post_close 0 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.95 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 22: All Students, All Books Initialized, Then No New Students/Books
+- "--init_types 20 --init_min_cp 10 --init_max_cp 10 --max_cycles 30 --max_total_commands 330 --min_req_per_day 3 --max_req_per_day 6 --b_w 3 --o_w 3 --q_w 2 --p_w 2 --fo_w 1 --read_w 3 --restore_w 1 --new_s_ratio 0.0 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 23: Very Long Run (Several Months), Fluctuating Activity
+- "--init_types 10 --init_min_cp 3 --init_max_cp 6 --max_cycles 180 --max_total_commands 1100 --min_req_per_day 2 --max_req_per_day 7 --b_w 3 --o_w 3 --q_w 3 --p_w 2 --fo_w 1 --read_w 3 --restore_w 1 --new_s_ratio 0.1 --min_skip_post_close 0 --max_skip_post_close 2 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 24: Pick Storm After Long Delay (High Pick Propensity, Likely Failures)
+- "--init_types 8 --init_min_cp 1 --init_max_cp 2 --max_cycles 25 --max_total_commands 130 --min_req_per_day 1 --max_req_per_day 3 --b_w 1 --o_w 4 --q_w 1 --p_w 2 --fo_w 1 --read_w 1 --restore_w 1 --new_s_ratio 0.15 --min_skip_post_close 6 --max_skip_post_close 8 --b_prio 0.4 --c_prio 0.6 --a_read_prio 0.2 --ret_prop 0.5 --pick_prop 0.95 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 25: Universal Apathy (Low Return, Pick, Restore Propensity)
+# Goal: Test system when students are very unlikely to return/pick/restore, stressing AO/BRO/RR tidying.
+- "--init_types 10 --init_min_cp 2 --init_max_cp 4 --max_cycles 20 --max_total_commands 160 --min_req_per_day 3 --max_req_per_day 5 --b_w 3 --o_w 3 --q_w 2 --p_w 2 --fo_w 1 --read_w 3 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.1 --pick_prop 0.1 --restore_prop 0.1 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 26: Extreme Ultra Long Pressure Test (Max everything, many cycles)
+- "--init_types 20 --init_min_cp 10 --init_max_cp 10 --max_cycles 300 --max_total_commands 2200 --min_req_per_day 8 --max_req_per_day 15 --b_w 4 --o_w 4 --q_w 4 --p_w 2 --fo_w 2 --read_w 4 --restore_w 1 --new_s_ratio 0.2 --min_skip_post_close 0 --max_skip_post_close 0 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.8 --pick_prop 0.8 --restore_prop 0.7 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 27: B-Book Priority High, but Low Pick Propensity for B-Books
+- "--init_types 6 --init_min_cp 1 --init_max_cp 2 --max_cycles 20 --max_total_commands 130 --min_req_per_day 2 --max_req_per_day 4 --b_w 6 --o_w 6 --q_w 1 --p_w 2 --fo_w 2 --read_w 1 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.9 --c_prio 0.1 --a_read_prio 0.2 --ret_prop 0.7 --pick_prop 0.2 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 28: High Churn of C-Books
+- "--init_types 10 --init_min_cp 3 --init_max_cp 5 --max_cycles 25 --max_total_commands 220 --min_req_per_day 4 --max_req_per_day 7 --b_w 1 --o_w 7 --q_w 2 --p_w 2 --fo_w 2 --read_w 2 --restore_w 1 --new_s_ratio 0.15 --b_prio 0.1 --c_prio 0.9 --a_read_prio 0.2 --ret_prop 0.8 --pick_prop 0.8 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 29: Single B-Book High Churn (Borrow, Order, Return, Pick, Read)
+- "--init_types 1 --init_min_cp 1 --init_max_cp 1 --max_cycles 25 --max_total_commands 220 --min_req_per_day 4 --max_req_per_day 7 --b_w 7 --o_w 7 --q_w 1 --p_w 2 --fo_w 2 --read_w 5 --restore_w 1 --new_s_ratio 0.2 --b_prio 1.0 --c_prio 0.0 --a_read_prio 0.0 --ret_prop 0.9 --pick_prop 0.9 --restore_prop 0.8 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 30: Single C-Book High Churn (Borrow, Order, Return, Pick, Read)
+- "--init_types 1 --init_min_cp 1 --init_max_cp 1 --max_cycles 25 --max_total_commands 220 --min_req_per_day 4 --max_req_per_day 7 --b_w 1 --o_w 7 --q_w 1 --p_w 2 --fo_w 2 --read_w 5 --restore_w 1 --new_s_ratio 0.2 --b_prio 0.0 --c_prio 1.0 --a_read_prio 0.0 --ret_prop 0.9 --pick_prop 0.9 --restore_prop 0.8 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 31: Two Scarce Book Types (1B, 1C), Intense Competition (Borrow, Order, Read)
+- "--init_types 2 --init_min_cp 1 --init_max_cp 1 --max_cycles 30 --max_total_commands 280 --min_req_per_day 5 --max_req_per_day 8 --b_w 5 --o_w 5 --q_w 1 --p_w 2 --fo_w 3 --read_w 4 --restore_w 1 --new_s_ratio 0.3 --b_prio 0.7 --c_prio 0.7 --a_read_prio 0.2 --ret_prop 0.8 --pick_prop 0.8 --restore_prop 0.7 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 32: Minimal Books (Mixed), Sustained Multi-Round Operations (Borrow, Return, Order, Pick, Read, Restore)
+- "--init_types 3 --init_min_cp 1 --init_max_cp 2 --max_cycles 40 --max_total_commands 330 --min_req_per_day 3 --max_req_per_day 5 --b_w 4 --o_w 4 --q_w 1 --p_w 2 --fo_w 1 --read_w 4 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.6 --c_prio 0.6 --a_read_prio 0.3 --ret_prop 0.95 --pick_prop 0.95 --restore_prop 0.9 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 33: Scarce Resources, High Failed Order/Read Weight
+- "--init_types 2 --init_min_cp 1 --init_max_cp 1 --max_cycles 20 --max_total_commands 160 --min_req_per_day 3 --max_req_per_day 6 --b_w 2 --o_w 2 --q_w 1 --p_w 2 --fo_w 8 --read_w 2 --restore_w 1 --new_s_ratio 0.1 --b_prio 0.5 --c_prio 0.5 --a_read_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.5 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# --- NEW SCENARIOS FOR HW14 FEATURES ---
+
+# Scenario 34: Reading Room Focus - High Read Activity, Varied Restore
+# Goal: Maximize books going into Reading Room (RR), test RR clearing during OPEN tidy.
+# Also tests "if user has unrestored book from same day, read fails" if multiple read attempts by same student occur.
+- "--init_types 10 --init_min_cp 2 --init_max_cp 4 --max_cycles 15 --max_total_commands 200 --min_req_per_day 5 --max_req_per_day 8 --b_w 1 --o_w 1 --q_w 1 --p_w 2 --fo_w 1 --read_w 8 --restore_w 1 --new_s_ratio 0.1 --a_read_prio 0.4 --b_prio 0.3 --c_prio 0.3 --ret_prop 0.5 --pick_prop 0.5 --restore_prop 0.4 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 35: Hot Bookshelf Dynamics - Make Books Hot, Then Check Tidy
+# Goal: Generate hot books through borrow/read, then ensure OPEN tidy correctly moves them to hbs, and non-hot to bs.
+- "--init_types 8 --init_min_cp 2 --init_max_cp 3 --max_cycles 10 --max_total_commands 150 --min_req_per_day 4 --max_req_per_day 6 --b_w 4 --o_w 1 --q_w 1 --p_w 2 --fo_w 1 --read_w 4 --restore_w 1 --new_s_ratio 0.1 --min_skip_post_close 0 --max_skip_post_close 0 --a_read_prio 0.3 --b_prio 0.5 --c_prio 0.5 --ret_prop 0.8 --pick_prop 0.7 --restore_prop 0.7 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 36: Focus on Reading A-Type Books
+# Goal: Ensure A-Type books can be read, become hot, but not borrowed/ordered.
+- "--init_types 5 --init_min_cp 3 --init_max_cp 5 --max_cycles 10 --max_total_commands 100 --min_req_per_day 3 --max_req_per_day 5 --b_w 1 --o_w 1 --q_w 3 --p_w 2 --fo_w 1 --read_w 7 --restore_w 1 --new_s_ratio 0.1 --a_read_prio 0.8 --b_prio 0.1 --c_prio 0.1 --ret_prop 0.6 --pick_prop 0.6 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 37: Read then No Restore - Test RR Tidy and Next Day Read Success
+# Goal: Student reads a book, does not restore it. Book should be tidied from RR during OPEN. Next day, student can read again.
+- "--init_types 3 --init_min_cp 1 --init_max_cp 1 --max_cycles 7 --max_total_commands 50 --min_req_per_day 1 --max_req_per_day 2 --b_w 3 --o_w 2 --q_w 3 --p_w 2 --fo_w 1 --read_w 5 --restore_w 1 --new_s_ratio 0.05 --min_skip_post_close 0 --max_skip_post_close 0 --a_read_prio 0.5 --b_prio 0.25 --c_prio 0.25 --ret_prop 0.5 --pick_prop 0.5 --restore_prop 0.0 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 38: Interaction of Hot Books with Borrow/Read of Other Books
+# Goal: Some books are hot on hbs, others on bs. Test if students can borrow/read from both shelves correctly.
+- "--init_types 12 --init_min_cp 2 --init_max_cp 4 --max_cycles 15 --max_total_commands 180 --min_req_per_day 3 --max_req_per_day 6 --b_w 3 --o_w 2 --q_w 2 --p_w 2 --fo_w 1 --read_w 3 --restore_w 1 --new_s_ratio 0.1 --a_read_prio 0.3 --b_prio 0.5 --c_prio 0.5 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 39: Tidy Stress - Frequent OPEN/CLOSE with Mixed Book States (BRO, RR, HBS/BS sorting)
+# Goal: Books in BRO (high ret_prop), RR (high read_w, moderate restore_prop). Test OPEN tidy handles BRO/RR clearing and HBS/BS sorting.
+- "--init_types 15 --init_min_cp 2 --init_max_cp 3 --max_cycles 20 --max_total_commands 250 --min_req_per_day 5 --max_req_per_day 8 --b_w 4 --o_w 4 --q_w 1 --p_w 2 --fo_w 1 --read_w 4 --restore_w 1 --new_s_ratio 0.1 --min_skip_post_close 0 --max_skip_post_close 0 --a_read_prio 0.3 --b_prio 0.5 --c_prio 0.5 --ret_prop 0.9 --pick_prop 0.4 --restore_prop 0.3 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 40: Query Trace Accuracy for Books Moved To/From hbs and rr
+# Goal: Ensure moving trace correctly captures movements involving new locations (hbs, rr).
+- "--init_types 7 --init_min_cp 1 --init_max_cp 2 --max_cycles 10 --max_total_commands 100 --min_req_per_day 2 --max_req_per_day 4 --b_w 2 --o_w 1 --q_w 7 --p_w 2 --fo_w 1 --read_w 2 --restore_w 1 --new_s_ratio 0.1 --a_read_prio 0.3 --b_prio 0.5 --c_prio 0.5 --ret_prop 0.8 --pick_prop 0.7 --restore_prop 0.7 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 41: Non-Hot Books Should Not Move to hbs, Hot Books Should Not Move to bs (During Tidy Integrity Check)
+# Goal: Specific test for the negative conditions of hot/normal shelf tidying (e.g. hbs must not have non-hot books).
+- "--init_types 6 --init_min_cp 3 --init_max_cp 3 --max_cycles 8 --max_total_commands 80 --min_req_per_day 1 --max_req_per_day 3 --b_w 1 --o_w 0 --q_w 1 --p_w 2 --fo_w 1 --read_w 1 --restore_w 1 --new_s_ratio 0.0 --min_skip_post_close 0 --max_skip_post_close 0 --a_read_prio 0.3 --b_prio 0.5 --c_prio 0.5 --ret_prop 0.1 --pick_prop 0.1 --restore_prop 0.1 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 42: Test "same day unrestored book, read fails" Rule
+# Goal: Student S reads B1, does not restore. S attempts to read B2 SAME DAY -> should fail.
+- "--init_types 5 --init_min_cp 1 --init_max_cp 2 --max_cycles 10 --max_total_commands 70 --min_req_per_day 2 --max_req_per_day 3 --b_w 1 --o_w 1 --q_w 3 --p_w 2 --fo_w 1 --read_w 6 --restore_w 1 --new_s_ratio 0.1 --a_read_prio 0.5 --b_prio 0.25 --c_prio 0.25 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.1 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# --- ADDITIONAL SCENARIOS FOR BOUNDARY CONDITIONS AND HW14 ---
+
+# Scenario 43: Student successful Read-Restore, then another Read SAME DAY
+# Goal: Test that after a student reads book X and successfully restores it, they can read book Y on the same day.
+- "--init_types 2 --init_min_cp 1 --init_max_cp 1 --max_cycles 3 --max_total_commands 30 --min_req_per_day 2 --max_req_per_day 2 --b_w 0 --o_w 0 --q_w 1 --p_w 0 --fo_w 0 --read_w 10 --restore_w 1 --new_s_ratio 0.0 --a_read_prio 0.5 --b_prio 0.25 --c_prio 0.25 --ret_prop 0.1 --pick_prop 0.1 --restore_prop 0.9 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 44: Interaction of Reserved Books at AO with Hot Bookshelf Tidy
+# Goal: Ensure that books reserved at AO are not affected by hbs/bs tidying, and tidying still proceeds for other books.
+- "--init_types 5 --init_min_cp 2 --init_max_cp 3 --max_cycles 5 --max_total_commands 70 --min_req_per_day 3 --max_req_per_day 4 --b_w 2 --o_w 5 --q_w 1 --p_w 3 --fo_w 1 --read_w 2 --restore_w 1 --new_s_ratio 0.1 --a_read_prio 0.3 --b_prio 0.4 --c_prio 0.3 --ret_prop 0.7 --pick_prop 0.8 --restore_prop 0.5 --min_skip_post_close 0 --max_skip_post_close 0 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 45: Dynamic Close Probability - Low Initial, Low Increment
+# Goal: Force long OPEN periods to test sustained activity before a CLOSE.
+- "--init_types 5 --init_min_cp 2 --init_max_cp 4 --max_cycles 3 --max_total_commands 150 --min_req_per_day 3 --max_req_per_day 5 --b_w 3 --o_w 3 --q_w 2 --p_w 2 --fo_w 1 --read_w 3 --restore_w 1 --new_s_ratio 0.1 --a_read_prio 0.3 --b_prio 0.4 --c_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.01 --close_prob_inc 0.01 --max_close_prob 0.5"
+
+# Scenario 46: Dynamic Close Probability - High Initial
+# Goal: Force frequent OPEN-CLOSE cycles.
+- "--init_types 5 --init_min_cp 2 --init_max_cp 4 --max_cycles 10 --max_total_commands 100 --min_req_per_day 1 --max_req_per_day 3 --b_w 3 --o_w 3 --q_w 2 --p_w 2 --fo_w 1 --read_w 3 --restore_w 1 --new_s_ratio 0.1 --a_read_prio 0.3 --b_prio 0.4 --c_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.8 --close_prob_inc 0.1 --max_close_prob 0.9"
+
+# Scenario 47: Hot Book Status Persistence Across Long Inactivity
+# Goal: Verify persistence of "hot" status across many skipped days and its effect on tidy after the gap.
+- "--init_types 3 --init_min_cp 1 --init_max_cp 1 --max_cycles 5 --max_total_commands 60 --min_req_per_day 1 --max_req_per_day 2 --b_w 5 --o_w 1 --q_w 1 --p_w 1 --fo_w 1 --read_w 5 --restore_w 1 --new_s_ratio 0.1 --min_skip_post_close 10 --max_skip_post_close 15 --a_read_prio 0.4 --b_prio 0.3 --c_prio 0.3 --ret_prop 0.8 --pick_prop 0.7 --restore_prop 0.7 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 48: No Activity Making Books Hot
+# Goal: Ensure hot status is only from student borrow/read. First OPEN has only queries or failed actions. Second OPEN, check all books still on BS (no hot books created).
+- "--init_types 5 --init_min_cp 2 --init_max_cp 3 --max_cycles 3 --max_total_commands 40 --min_req_per_day 1 --max_req_per_day 1 --b_w 0 --o_w 0 --q_w 10 --p_w 0 --fo_w 1 --read_w 0 --restore_w 0 --new_s_ratio 0.0 --a_read_prio 0.1 --b_prio 0.1 --c_prio 0.1 --ret_prop 0.1 --pick_prop 0.1 --restore_prop 0.1 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 49: Maximum SUT Limits Stress Test
+# Goal: Push specified limits: init_types=100, 10 copies/type, max_total_commands=200.
+- "--init_types 100 --init_min_cp 10 --init_max_cp 10 --max_cycles 20 --max_total_commands 200 --min_req_per_day 5 --max_req_per_day 10 --b_w 3 --o_w 3 --q_w 3 --p_w 2 --fo_w 1 --read_w 3 --restore_w 1 --new_s_ratio 0.2 --a_read_prio 0.3 --b_prio 0.4 --c_prio 0.3 --ret_prop 0.7 --pick_prop 0.7 --restore_prop 0.6 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"
+
+# Scenario 50: Zero Skips Post Close, High Activity
+# Goal: Test scenario with no days skipped after closing, immediately reopening for high frequency tidying and actions.
+- "--init_types 10 --init_min_cp 2 --init_max_cp 5 --max_cycles 15 --max_total_commands 200 --min_req_per_day 5 --max_req_per_day 8 --b_w 4 --o_w 3 --q_w 2 --p_w 3 --fo_w 1 --read_w 4 --restore_w 1 --new_s_ratio 0.2 --min_skip_post_close 0 --max_skip_post_close 0 --a_read_prio 0.3 --b_prio 0.4 --c_prio 0.3 --ret_prop 0.8 --pick_prop 0.8 --restore_prop 0.7 --init_close_prob 0.1 --close_prob_inc 0.15 --max_close_prob 0.9"

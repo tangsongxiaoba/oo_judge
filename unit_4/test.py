@@ -31,6 +31,7 @@ LOG_DIR = "logs"
 TMP_DIR = "tmp"
 DEFAULT_PARALLEL_ROUNDS = 16
 CLEANUP_SUCCESSFUL_ROUNDS = True
+DEFAULT_ROUND_GAP_TIME = 0.0 # Default sleep time after each round processing
 
 # Helper function for conditional debug printing
 def debug_print(*args, **kwargs):
@@ -51,6 +52,7 @@ class JarTester:
     _raw_preset_commands = [] # List of raw preset strings (for logging)
     _loaded_preset_commands = []
     _cycle_cpu_timeout_from_config = DEFAULT_CYCLE_CPU_TIMEOUT_FROM_CONFIG # Value from config for driver's --cycle_timeout
+    _round_gap_time = DEFAULT_ROUND_GAP_TIME # Sleep time after each round
 
     _history_lock = threading.Lock()
     _log_lock = threading.Lock()
@@ -538,28 +540,42 @@ class JarTester:
 
     @staticmethod
     def test():
-        global ENABLE_DETAILED_DEBUG, LOG_DIR, TMP_DIR, CLEANUP_SUCCESSFUL_ROUNDS, MIN_WALL_TIME_LIMIT 
-        global BASE_WALL_TIME_PER_CYCLE, BASE_FIXED_OVERHEAD_TIME, DEFAULT_ESTIMATED_WALL_TIME, DEFAULT_CYCLE_CPU_TIMEOUT_FROM_CONFIG
+        # Make globals accessible if they are module-level constants, or use JarTester static members
+        # For this refactor, we assume these are intended to be JarTester configurable parameters.
+        # If they were true globals, they'd need `global` keyword in this method.
+        # They are already defined as module-level constants, so direct use is fine.
+        # For consistency, let's make them JarTester members or ensure config overrides them.
+        # The existing code already reassigns LOG_DIR, TMP_DIR, etc. based on config.
+        # CPU_TIME_LIMIT is not yet configurable via config.yml in this snippet, but could be.
+
         start_time_main = time.monotonic()
         try:
             config_path = 'config.yml'
             if not os.path.exists(config_path): print(f"ERROR: config.yml not found.", file=sys.stderr); return
             with open(config_path, 'r', encoding='utf-8') as f: config = yaml.safe_load(f)
             if not config: print(f"ERROR: config.yml is empty/invalid.", file=sys.stderr); return
+            
+            # Update global/static config based on config.yml
+            # Using global keyword for module-level constants that are reassigned based on config
+            global LOG_DIR, TMP_DIR, ENABLE_DETAILED_DEBUG, CLEANUP_SUCCESSFUL_ROUNDS
+            global MIN_WALL_TIME_LIMIT, BASE_WALL_TIME_PER_CYCLE, BASE_FIXED_OVERHEAD_TIME
+            global DEFAULT_ESTIMATED_WALL_TIME, DEFAULT_CYCLE_CPU_TIMEOUT_FROM_CONFIG
+            # CPU_TIME_LIMIT and DEFAULT_PARALLEL_ROUNDS are module-level constants not yet overridden by config in this structure.
+
             hw_n = config.get('hw'); jar_base_dir = config.get('jar_base_dir')
             LOG_DIR = config.get('logs_dir', LOG_DIR); TMP_DIR = config.get('tmp_dir', TMP_DIR)
+            
             test_config = config.get('test', {})
             parallel_rounds_config = test_config.get('parallel', DEFAULT_PARALLEL_ROUNDS)
             ENABLE_DETAILED_DEBUG = bool(test_config.get('debug', ENABLE_DETAILED_DEBUG))
             CLEANUP_SUCCESSFUL_ROUNDS = bool(test_config.get('cleanup', CLEANUP_SUCCESSFUL_ROUNDS))
             
-            # Load wall time parameters and new cycle_cpu_timeout from config
             MIN_WALL_TIME_LIMIT = float(test_config.get('min_wall_time_limit', MIN_WALL_TIME_LIMIT))
-            BASE_WALL_TIME_PER_CYCLE = float(test_config.get('base_wall_time_per_cycle', BASE_WALL_TIME_PER_CYCLE)) # Still used if new formula fails
+            BASE_WALL_TIME_PER_CYCLE = float(test_config.get('base_wall_time_per_cycle', BASE_WALL_TIME_PER_CYCLE))
             BASE_FIXED_OVERHEAD_TIME = float(test_config.get('base_fixed_overhead_time', BASE_FIXED_OVERHEAD_TIME))
             DEFAULT_ESTIMATED_WALL_TIME = float(test_config.get('default_estimated_wall_time', DEFAULT_ESTIMATED_WALL_TIME))
             JarTester._cycle_cpu_timeout_from_config = float(test_config.get('cycle_cpu_timeout', DEFAULT_CYCLE_CPU_TIMEOUT_FROM_CONFIG))
-
+            JarTester._round_gap_time = float(test_config.get('gap', JarTester._round_gap_time)) # Read new gap parameter
 
             if hw_n is None or not jar_base_dir: print("ERROR: 'hw' or 'jar_base_dir' missing.", file=sys.stderr); return
             m = hw_n // 4 + 1; hw_n_str = os.path.join(f"unit_{m}", f"hw_{hw_n}")
@@ -572,16 +588,21 @@ class JarTester:
                 if not isinstance(JarTester._loaded_preset_commands, list) or not all(isinstance(i, str) for i in JarTester._loaded_preset_commands):
                     print(f"ERROR: Presets file must be a YAML list of strings.", file=sys.stderr); return
             except Exception as e: print(f"ERROR: Loading presets: {e}", file=sys.stderr); return
+            
             os.makedirs(LOG_DIR, exist_ok=True); os.makedirs(TMP_DIR, exist_ok=True)
             JarTester._log_file_path = os.path.abspath(os.path.join(LOG_DIR, f"{time.strftime('%Y%m%d-%H%M%S')}_driver_run.log"))
+            
             print(f"INFO: Target: {hw_n_str}, Logs: {JarTester._log_file_path}")
+            print(f"INFO: Parallel rounds: {parallel_rounds_config}, Debug: {ENABLE_DETAILED_DEBUG}, Cleanup: {CLEANUP_SUCCESSFUL_ROUNDS}")
             print(f"INFO: Wall Time Params: Min={MIN_WALL_TIME_LIMIT:.1f}s, FixedOverhead={BASE_FIXED_OVERHEAD_TIME:.1f}s, DefaultEst={DEFAULT_ESTIMATED_WALL_TIME:.1f}s")
             print(f"INFO: Driver Params: Configured Cycle Timeout for Driver (passed as --cycle_timeout): {JarTester._cycle_cpu_timeout_from_config:.1f}s")
+            print(f"INFO: Post-round processing gap: {JarTester._round_gap_time:.2f}s")
 
 
             if not os.path.exists(JarTester._driver_script_path): print(f"ERROR: Driver script not found: {JarTester._driver_script_path}", file=sys.stderr); return
             if not JarTester._find_jar_files(): print("ERROR: No JARs found.", file=sys.stderr); return
             if not JarTester._initialize_presets(): print("ERROR: Failed to init presets.", file=sys.stderr); return
+            
             signal.signal(signal.SIGINT, JarTester._signal_handler)
             if not ENABLE_DETAILED_DEBUG: input("Setup complete. Press Enter to begin testing...")
             
@@ -591,29 +612,64 @@ class JarTester:
                     while len(active_futures) < parallel_rounds_config and not JarTester._interrupted:
                         round_num = JarTester._get_next_round_number()
                         active_futures.add(executor.submit(JarTester._run_one_round, round_num))
-                    if JarTester._interrupted: break
+                    
+                    if not active_futures and JarTester._interrupted : # All submitted tasks finished and interrupted
+                        break
+                    if not active_futures and not JarTester._interrupted: # All submitted tasks finished, but loop may continue if more rounds intended (e.g. if a max_rounds was set)
+                        # This logic assumes continuous rounds unless interrupted. If there's a max number of rounds,
+                        # this part might need adjustment. For now, it just means no active tasks.
+                        if not JarTester._interrupted: # Avoid sleeping if interrupted immediately after tasks clear
+                            time.sleep(0.1) # Small sleep to prevent busy-waiting if no tasks and not interrupted.
+                        continue
+
+
+                    if JarTester._interrupted and not active_futures: break # Exit if interrupted and no tasks left
+                    
                     done, active_futures = concurrent.futures.wait(active_futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                    
                     for future in done:
+                        pkg = None
                         try:
                             pkg = future.result()
-                            if pkg: JarTester._display_and_log_results(pkg["round_num"], pkg["results"], pkg["preset_cmd"], pkg["wall_limit"])
-                            if pkg and not JarTester._interrupted: JarTester._update_history(pkg["results"])
-                        except Exception as exc: print(f"ERROR processing round future: {exc}\n{traceback.format_exc()}")
+                            if pkg: 
+                                JarTester._display_and_log_results(pkg["round_num"], pkg["results"], pkg["preset_cmd"], pkg["wall_limit"])
+                                if not JarTester._interrupted: # Check before history update
+                                    JarTester._update_history(pkg["results"])
+                        except Exception as exc: 
+                            print(f"ERROR processing round future: {exc}\n{traceback.format_exc()}", file=sys.stderr)
+                        finally:
+                            # Sleep after processing each completed round, if gap is configured and not interrupted
+                            if JarTester._round_gap_time > 0.0 and not JarTester._interrupted:
+                                debug_print(f"Main thread sleeping for {JarTester._round_gap_time:.2f}s after processing round results.")
+                                time.sleep(JarTester._round_gap_time)
+                
                 if JarTester._interrupted and active_futures:
-                    print("\nInterrupt: Waiting for active rounds..."); (done_after, _) = concurrent.futures.wait(active_futures, timeout=10.0, return_when=concurrent.futures.ALL_COMPLETED)
-                    for future in done_after:
+                    print("\nInterrupt: Waiting for active rounds to complete processing or timeout...")
+                    # Give some time for threads to notice interruption and for results to be collected if they finish fast
+                    (done_after_interrupt, _) = concurrent.futures.wait(active_futures, timeout=10.0, return_when=concurrent.futures.ALL_COMPLETED)
+                    for future in done_after_interrupt:
                         try:
-                            pkg = future.result()
+                            pkg = future.result(timeout=0.5) # Short timeout to get result if readily available
                             if pkg: JarTester._display_and_log_results(pkg["round_num"],pkg["results"],pkg["preset_cmd"],pkg["wall_limit"])
-                        except Exception: pass # Already handled or interrupting
-        except Exception as e: print(f"\nFATAL ERROR in main: {e}\n{traceback.format_exc()}", file=sys.stderr); JarTester._interrupted = True
+                        except concurrent.futures.TimeoutError:
+                            debug_print(f"Future did not complete quickly after interrupt signal for result display.")
+                        except Exception: 
+                            pass # Already handled or interrupting; primarily concerned with graceful logging of completed tasks.
+        
+        except Exception as e: 
+            print(f"\nFATAL ERROR in main: {e}\n{traceback.format_exc()}", file=sys.stderr)
+            JarTester._interrupted = True # Ensure interruption flag is set on fatal error
         finally:
             summary = JarTester._print_summary() 
             print(summary)
             if JarTester._log_file_path:
                 try:
-                     with JarTester._log_lock: open(JarTester._log_file_path, "a", encoding="utf-8").write("\n\n" + "="*20 + " FINAL SUMMARY " + "="*20 + "\n" + summary + "\n")
-                except Exception: pass
+                     with JarTester._log_lock: 
+                         with open(JarTester._log_file_path, "a", encoding="utf-8") as f:
+                            f.write("\n\n" + "="*20 + " FINAL SUMMARY " + "="*20 + "\n" + summary + "\n")
+                except Exception as e_log_final:
+                    print(f"ERROR: Failed to write final summary to log: {e_log_final}", file=sys.stderr)
+            
             end_time_main = time.monotonic()
             print(f"\nTotal execution time: {end_time_main - start_time_main:.2f} seconds.")
 
@@ -627,10 +683,12 @@ class JarTester:
 #     #   parallel: 4
 #     #   debug: false
 #     #   cleanup: true
-#     #   min_wall_time_limit: 10.0        # Floor for tester's wall time limit for driver.py
-#     #   base_fixed_overhead_time: 5.0    # Fixed overhead for driver (startup, SUT init, etc.)
-#     #   default_estimated_wall_time: 60.0 # Fallback wall time if --max_cycles not in preset for calculation
-#     #   cycle_cpu_timeout: 2.5           # Value for driver.py's --cycle_timeout arg (SUT output collection per cycle)
-#     #                                    # Also used in tester's wall time formula: cycle_cpu_timeout * 1.1 * max_cycles + base_fixed_overhead_time
-#     #   # base_wall_time_per_cycle: 2.5 # Kept for compatibility if cycle_cpu_timeout based formula parts are missing.
+#     #   min_wall_time_limit: 10.0
+#     #   base_fixed_overhead_time: 5.0
+#     #   default_estimated_wall_time: 60.0
+#     #   cycle_cpu_timeout: 2.5
+#     #   gap: 0.5  # NEW: Sleep for 0.5 seconds after processing each completed round
+#     #   # base_wall_time_per_cycle: 2.5 # Kept for compatibility
 #     JarTester.test()
+
+# --- END OF FILE test.py ---

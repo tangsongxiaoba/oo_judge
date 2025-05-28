@@ -1,6 +1,6 @@
-hw: 13
+hw: 14
 assets_dir: assets
-class_path: library1.jar
+class_path: library2.jar
 stu_id: 23066666 # 学号
 stu_pwd: 'password' # 密码
 jar_base_dir: jar
@@ -23,7 +23,8 @@ test:
   base_wall_time_per_cycle: 2.5             # (seconds) Estimated time per cycle in driver.py
   base_fixed_overhead_time: 5.0             # (seconds) Estimated fixed overhead for driver
   default_estimated_wall_time: 50.0         # (seconds) Fallback if --max_cycles not in preset
-  cycle_cpu_timeout: 0.2
+  cycle_cpu_timeout: 0.2                    # (seconds) wait time for driver to wait every cycle
+  gap: 0.5                                  # (seconds) wait time after every Running Round
   parallel: 8
   debug: False
   cleanup: True
