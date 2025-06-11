@@ -62,25 +62,25 @@
 
 # Scenario 51: Credit Query Storm
 # Goal: Isolate and stress the new 'queried credit score' functionality.
-- "--init_types 5 --init_min_cp 2 --init_max_cp 3 --max_cycles 10 --max_total_commands 100 --b_w 1 --o_w 1 --read_w 1 --trace_q_w 1 --credit_q_w 10 --fail_b_w 1 --fail_o_w 1 --ret_prop 0.9 --pick_prop 0.9 --restore_prop 0.9"
+- "--init_types 5 --init_min_cp 2 --init_max_cp 3 --max_cycles 10 --max_total_commands 300 --b_w 1 --o_w 1 --read_w 1 --trace_q_w 1 --credit_q_w 10 --fail_b_w 1 --fail_o_w 1 --ret_prop 0.9 --pick_prop 0.9 --restore_prop 0.9"
 
 # Scenario 52: The "Bad Student" Simulation - Triggering All Penalties
 # Goal: Test all credit penalty triggers by making students very irresponsible.
 # Low propensities will lead to overdue books, unpicked orders, and unrestored readings.
-- "--init_types 10 --init_min_cp 2 --init_max_cp 4 --max_cycles 40 --max_total_commands 300 --b_w 4 --o_w 4 --read_w 4 --trace_q_w 1 --credit_q_w 2 --ret_prop 0.1 --pick_prop 0.1 --restore_prop 0.1"
+- "--init_types 10 --init_min_cp 2 --init_max_cp 4 --max_cycles 40 --max_total_commands 700 --b_w 4 --o_w 4 --read_w 4 --trace_q_w 1 --credit_q_w 2 --ret_prop 0.1 --pick_prop 0.1 --restore_prop 0.1"
 
 # Scenario 53: Credit Threshold Dance - Boundary Testing
 # Goal: Test actions right at credit thresholds (read A-book at 40, borrow at 60, order at 100).
 # High `fail_b_w` will actively seek out students with credit just below thresholds to attempt actions.
-- "--init_types 8 --init_min_cp 2 --init_max_cp 3 --max_cycles 50 --max_total_commands 250 --b_w 2 --o_w 2 --read_w 2 --trace_q_w 1 --credit_q_w 1 --fail_b_w 8 --fail_o_w 1 --ret_prop 0.3 --pick_prop 0.3 --restore_prop 0.3"
+- "--init_types 8 --init_min_cp 2 --init_max_cp 3 --max_cycles 50 --max_total_commands 800 --b_w 2 --o_w 2 --read_w 2 --trace_q_w 1 --credit_q_w 1 --fail_b_w 8 --fail_o_w 1 --ret_prop 0.3 --pick_prop 0.3 --restore_prop 0.3"
 
 # Scenario 54: Credit Rock Bottom and Recovery
 # Goal: Drive student credit scores to zero or negative, then run for many days with low activity to verify the daily +1 credit recovery.
-- "--init_types 5 --init_min_cp 1 --init_max_cp 1 --max_cycles 100 --max_total_commands 300 --b_w 5 --o_w 5 --read_w 5 --ret_prop 0.0 --pick_prop 0.0 --restore_prop 0.0 --trace_q_w 1 --credit_q_w 3"
+- "--init_types 5 --init_min_cp 1 --init_max_cp 1 --max_cycles 100 --max_total_commands 3000 --b_w 5 --o_w 5 --read_w 5 --ret_prop 0.0 --pick_prop 0.0 --restore_prop 0.0 --trace_q_w 1 --credit_q_w 3"
 
 # Scenario 55: Borrowing Term Limit Stress Test (30/60 days)
 # Goal: Run for over 60 cycles to test if B-books (30 days) and C-books (60 days) correctly trigger overdue penalties after their respective periods.
-- "--init_types 6 --init_min_cp 1 --init_max_cp 2 --max_cycles 70 --max_total_commands 200 --b_w 5 --o_w 1 --c_prio 0.9 --ret_prop 0.0 --pick_prop 0.9 --restore_prop 0.9 --trace_q_w 1 --credit_q_w 1"
+- "--init_types 6 --init_min_cp 1 --init_max_cp 2 --max_cycles 70 --max_total_commands 2000 --b_w 5 --o_w 1 --c_prio 0.9 --ret_prop 0.0 --pick_prop 0.9 --restore_prop 0.9 --trace_q_w 1 --credit_q_w 1"
 
 # Scenario 56: High-Intensity Credit Failure Cacophony
 # Goal: A massive stress test combining high student churn, high action rates, and high probability of irresponsibility. This will create a chaotic environment of valid/invalid actions and penalties.
@@ -88,8 +88,47 @@
 
 # Scenario 57: A-Book Reading vs. Credit
 # Goal: Focus on reading A-type books, which requires 40+ credit. Use fail_b_w to create attempts from students with <40 credit.
-- "--init_types 5 --init_min_cp 3 --init_max_cp 5 --max_cycles 10 --max_total_commands 120 --read_w 8 --a_read_prio 0.9 --fail_b_w 4 --b_w 1 --o_w 1 --trace_q_w 1 --credit_q_w 2 --ret_prop 0.5 --pick_prop 0.5 --restore_prop 0.5"
+- "--init_types 5 --init_min_cp 3 --init_max_cp 5 --max_cycles 10 --max_total_commands 500 --read_w 8 --a_read_prio 0.9 --fail_b_w 4 --b_w 1 --o_w 1 --trace_q_w 1 --credit_q_w 2 --ret_prop 0.5 --pick_prop 0.5 --restore_prop 0.5"
 
 # Scenario 58: Zero Credit Limbo
 # Goal: Test behavior at exactly 0 credit. Students should be unable to read A-books or borrow/order, but still able to read B/C books.
-- "--init_types 5 --init_min_cp 1 --init_max_cp 1 --max_cycles 40 --max_total_commands 200 --b_w 1 --o_w 1 --read_w 6 --ret_prop 0.1 --pick_prop 0.1 --restore_prop 0.1 --fail_b_w 5 --trace_q_w 1 --credit_q_w 2"
+- "--init_types 5 --init_min_cp 1 --init_max_cp 1 --max_cycles 40 --max_total_commands 800 --b_w 1 --o_w 1 --read_w 6 --ret_prop 0.1 --pick_prop 0.1 --restore_prop 0.1 --fail_b_w 5 --trace_q_w 1 --credit_q_w 2"
+# Scenario 59: The Credit Cap Challenge
+# Goal: Test the upper credit limit of 180. Make students "perfect" so they rapidly gain credit through timely returns and restores.
+# Method: High propensity for all "good" behaviors (return, pick, restore). High frequency of reading and borrowing to maximize credit-gaining opportunities. A low new student ratio keeps the focus on the same group of students, allowing their credit to accumulate.
+- "--init_types 10 --init_min_cp 3 --init_max_cp 5 --max_cycles 50 --max_total_commands 1000 --min_req_per_day 5 --max_req_per_day 10 --b_w 5 --o_w 1 --read_w 5 --restore_w 1 --trace_q_w 1 --credit_q_w 2 --ret_prop 1.0 --pick_prop 1.0 --restore_prop 1.0 --new_s_ratio 0.0"
+
+# Scenario 60: The Single, Cursed Book
+# Goal: Create extreme resource contention on a single C-type book copy. This will trigger a flood of failed borrows and a queue of orders, testing order failure logic (--fail_o_w) and student patience (not picking up an order).
+# Method: Only one book in the entire library. Low return propensity keeps it out of circulation for long periods. High borrow and order weights ensure constant competition.
+- "--init_types 1 --init_min_cp 1 --init_max_cp 1 --max_cycles 60 --max_total_commands 800 --b_w 8 --o_w 8 --fail_o_w 5 --trace_q_w 1 --credit_q_w 1 --ret_prop 0.1 --pick_prop 0.2 --restore_prop 0.9 --c_prio 1.0"
+
+# Scenario 61: Mass Overdue Apocalypse
+# Goal: Force a large number of books (both B and C types) to become overdue simultaneously. This stress-tests if credit penalties are applied correctly and massively on the same day.
+# Method: Initially, generate a high number of borrow requests with a high return propensity of 0.0. Then, introduce a massive time skip (65+ days) to make all B (30d) and C (60d) books overdue. After the skip, query credit scores to check for massive deductions.
+- "--init_types 15 --init_min_cp 2 --init_max_cp 3 --max_cycles 70 --max_total_commands 500 --min_req_per_day 10 --max_req_per_day 15 --b_w 10 --o_w 0 --read_w 0 --min_skip_post_close 65 --max_skip_post_close 70 --ret_prop 0.0 --pick_prop 0.0 --restore_prop 0.0 --credit_q_w 5"
+
+# Scenario 62: The Zero Credit Limbo Dance
+# Goal: Specifically test behavior at the critical credit score of 0. At 0, students should NOT be able to read B/C books (rule is > 0). This is a precise boundary check.
+# Method: Create a "penalty farm" with very irresponsible students (all propensities at 0). Heavily weight the `fail_b_w` generator, which will seek out low-credit students and make them attempt actions, increasing the chance of an action being attempted at exactly 0 credit.
+- "--init_types 8 --init_min_cp 1 --init_max_cp 1 --max_cycles 60 --max_total_commands 1500 --b_w 2 --o_w 2 --read_w 2 --fail_b_w 10 --trace_q_w 1 --credit_q_w 2 --ret_prop 0.0 --pick_prop 0.0 --restore_prop 0.0"
+
+# Scenario 63: The Juggling Act
+# Goal: Create a complex situation for a single student: holding a B book, a C book, having a pending order, and having read a book, all with conflicting deadlines and rules.
+# Method: Use a very low new student ratio (0.0) and a small pool of books. Balance the action weights to encourage a mix of activities. Use mid-range propensities (0.2) to create a chaotic mix of timely and late actions. A very long cycle count is needed to let all the different deadlines (30d, 60d, 5d pickup) interact.
+- "--init_types 4 --init_min_cp 1 --init_max_cp 1 --max_cycles 80 --max_total_commands 2000 --new_s_ratio 0.0 --b_w 3 --o_w 3 --read_w 3 --p_w 2 --ret_prop 0.2 --pick_prop 0.2 --restore_prop 0.2 --credit_q_w 1"
+
+# Scenario 64: Daily Penalty Grind on Idle Days
+# Goal: Verify that the daily -5 credit penalty for an overdue book is applied correctly on days where NO other student actions occur.
+# Method: Borrow a book, then ensure it becomes overdue with a 35-day skip. After the skip, run for many cycles with max requests set to 1 and low action weights, but high credit query weight. This creates many "empty" days where the only change should be the daily penalty.
+- "--init_types 2 --init_min_cp 1 --init_max_cp 1 --max_cycles 80 --max_total_commands 400 --min_req_per_day 0 --max_req_per_day 1 --min_skip_post_close 35 --max_skip_post_close 35 --b_w 10 --o_w 0 --read_w 0 --credit_q_w 10 --ret_prop 0.0"
+
+# Scenario 65: The Redemption Arc
+# Goal: First, drive student credits to near-zero. Then, in the later part of the test, see if they can recover their credit back to 100+ by behaving well. Tests the full dynamic range of the credit system.
+# Method: A very long test. Initial phase implicitly created by low propensities (0.3). As students lose privileges (can't borrow/order), their only available actions are returning old books or restoring reads, which grant credit. This creates a natural "bottoming out and recovery" dynamic. High command count is essential.
+- "--init_types 10 --init_min_cp 2 --init_max_cp 2 --max_cycles 100 --max_total_commands 3000 --b_w 4 --o_w 4 --read_w 4 --ret_prop 0.3 --pick_prop 0.3 --restore_prop 0.3 --fail_b_w 2 --credit_q_w 1"
+
+# Scenario 66: Order & Pickup Deadline Precision
+# Goal: Test the 5-day order pickup window with high precision. Generate picks on day 5 (should succeed) and day 6 (should fail and penalize).
+# Method: Focus heavily on ordering books. After orders are likely fulfilled, use a tight 4-5 day time skip. Then, switch to heavily weighting 'pick' commands. This timing manipulation creates a high probability of testing the deadline boundary. Good-behavior propensities are high to isolate the test from other penalties.
+- "--init_types 5 --init_min_cp 3 --init_max_cp 4 --max_cycles 20 --max_total_commands 600 --min_skip_post_close 4 --max_skip_post_close 5 --o_w 10 --p_w 10 --b_w 1 --read_w 1 --ret_prop 0.9 --pick_prop 0.9 --restore_prop 0.9 --credit_q_w 2"
