@@ -100,6 +100,7 @@ def run_analysis(student_id):
         print(f"❌ 错误: 分析脚本 '{ANALYZE_SCRIPT}' 执行失败。")
     finally:
         os.remove(source_data_file)
+        pass
 
 
 if __name__ == "__main__":
